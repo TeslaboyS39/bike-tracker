@@ -1,0 +1,1459 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GPS Tracker + Geofence</title>
+
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+    onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';"
+  />
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      height: 100vh;
+    }
+
+    .sidebar {
+      background: #1e293b;
+      border-right: 1px solid #334155;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .sidebar::-webkit-scrollbar { width: 8px; }
+    .sidebar::-webkit-scrollbar-track { background: #0f172a; }
+    .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+
+    .sidebar h1 {
+      font-size: 17px;
+      font-weight: 600;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sidebar h1::before { content: "📍"; font-size: 20px; }
+
+    .tabs {
+      display: flex;
+      gap: 4px;
+      background: #0f172a;
+      padding: 4px;
+      border-radius: 6px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 8px;
+      text-align: center;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #94a3b8;
+      transition: all 0.15s;
+      border: none;
+      background: transparent;
+    }
+
+    .tab.active { background: #3b82f6; color: white; }
+
+    .tab-content { display: none; flex-direction: column; gap: 14px; }
+    .tab-content.active { display: flex; }
+
+    .upload-box {
+      border: 2px dashed #475569;
+      border-radius: 8px;
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #0f172a;
+    }
+    .upload-box:hover { border-color: #3b82f6; background: #1e3a8a20; }
+    .upload-box.dragover { border-color: #3b82f6; background: #1e3a8a40; }
+    .upload-box p { font-size: 13px; color: #94a3b8; margin-top: 8px; }
+    .upload-box .icon { font-size: 28px; }
+    #fileInput { display: none; }
+
+    .stats { display: none; flex-direction: column; gap: 10px; }
+    .stats.visible { display: flex; }
+
+    .stat-card {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px 12px;
+    }
+
+    .stat-card .label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      margin-bottom: 3px;
+    }
+
+    .stat-card .value {
+      font-size: 15px;
+      font-weight: 600;
+      color: #f1f5f9;
+    }
+
+    .stat-card .value .unit {
+      font-size: 11px;
+      font-weight: 400;
+      color: #94a3b8;
+      margin-left: 3px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .playback {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .playback.visible { display: flex; }
+
+    .playback h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+    }
+
+    .controls { display: flex; gap: 6px; }
+
+    .controls button {
+      flex: 1;
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.15s;
+    }
+    .controls button:hover { background: #334155; }
+    .controls button.primary { background: #3b82f6; border-color: #3b82f6; }
+    .controls button.primary:hover { background: #2563eb; }
+    .controls button.danger { background: #dc2626; border-color: #dc2626; }
+    .controls button.danger:hover { background: #b91c1c; }
+    .controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .slider { width: 100%; cursor: pointer; }
+
+    .current-point {
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .info-message {
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .geofence-controls {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .gf-input-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .gf-input-row input[type="text"] {
+      flex: 1;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #e2e8f0;
+      padding: 7px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    .gf-input-row input[type="color"] {
+      width: 36px;
+      height: 32px;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      background: transparent;
+      cursor: pointer;
+      padding: 2px;
+    }
+
+    .gf-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .gf-item {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .gf-item:hover { background: #334155; }
+
+    .gf-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px solid white;
+    }
+
+    .gf-item-name { flex: 1; color: #f1f5f9; }
+    .gf-item-points { color: #64748b; font-size: 10px; }
+
+    .gf-item button {
+      background: transparent;
+      border: none;
+      color: #ef4444;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+    }
+
+    .gf-item button:hover { color: #f87171; }
+
+    .events-log {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .event-item {
+      background: #0f172a;
+      border-left: 3px solid #3b82f6;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
+    }
+
+    .event-item:hover { background: #1e293b; }
+
+    .event-item .event-type {
+      font-weight: 600;
+      color: #f1f5f9;
+      font-size: 12px;
+    }
+
+    .event-item .event-time { color: #94a3b8; }
+    .event-item .event-duration { color: #64748b; font-size: 10px; }
+
+    .empty-text {
+      font-size: 12px;
+      color: #64748b;
+      text-align: center;
+      padding: 12px;
+      font-style: italic;
+    }
+
+    .draw-hint {
+      background: #1e3a8a40;
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+      padding: 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .draw-hint kbd {
+      background: #0f172a;
+      border: 1px solid #475569;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: monospace;
+    }
+
+    #map { width: 100%; height: 100vh; }
+    .leaflet-container.drawing-cursor { cursor: crosshair !important; }
+
+    /* ---------- Storage & History ---------- */
+    .storage-section {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .storage-section h3 {
+      font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.5px; color: #64748b;
+    }
+    .storage-status { font-size: 12px; color: #94a3b8; }
+    .storage-status.ok { color: #86efac; }
+    .btn-setup-folder {
+      background: #3b82f6; color: white; border: none;
+      border-radius: 4px; padding: 8px; cursor: pointer;
+      font-size: 13px; transition: background 0.15s;
+    }
+    .btn-setup-folder:hover { background: #2563eb; }
+    .btn-setup-folder:disabled { opacity: 0.4; cursor: not-allowed; }
+    .history-list {
+      display: flex; flex-direction: column; gap: 5px;
+      max-height: 320px; overflow-y: auto;
+    }
+    .history-item {
+      background: #0f172a; border: 1px solid #334155;
+      border-radius: 4px; padding: 8px 10px; font-size: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .hi-header { display: flex; align-items: center; gap: 6px; }
+    .hi-name-text {
+      flex: 1; color: #f1f5f9; font-weight: 500; cursor: pointer;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      transition: color 0.15s;
+    }
+    .hi-name-text:hover { color: #f97316; }
+    .hi-actions { display: flex; gap: 3px; flex-shrink: 0; }
+    .hi-btn {
+      background: transparent; border: none; color: #64748b;
+      cursor: pointer; padding: 2px 5px; border-radius: 3px;
+      font-size: 13px; transition: all 0.15s; line-height: 1;
+    }
+    .hi-btn:hover { color: #f1f5f9; background: #1e293b; }
+    .hi-btn.del:hover { color: #ef4444; }
+    .hi-rename-input {
+      flex: 1; background: #1e293b; border: 1px solid #3b82f6;
+      color: #f1f5f9; padding: 3px 7px; border-radius: 3px;
+      font-size: 12px; outline: none; min-width: 0;
+    }
+    .history-item .hi-meta { color: #64748b; font-size: 10px; }
+    .btn-save-route {
+      background: #16a34a; color: white; border: none;
+      border-radius: 4px; padding: 10px; cursor: pointer;
+      font-size: 13px; font-weight: 500; width: 100%;
+      transition: background 0.15s; display: none;
+    }
+    .btn-save-route:hover { background: #15803d; }
+
+    /* ---------- Speed legend ---------- */
+    .speed-legend {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .speed-legend .label {
+      font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.5px; color: #64748b;
+    }
+    .legend-swatches { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
+    .leg-sw {
+      font-size: 10px; color: white; padding: 3px 7px;
+      border-radius: 3px; font-weight: 600; white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <h1>GPS Tracker + Geofence</h1>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="track">Track</button>
+        <button class="tab" data-tab="geofence">Geofence</button>
+        <button class="tab" data-tab="events">Events</button>
+        <button class="tab" data-tab="history">History</button>
+      </div>
+
+      <!-- TAB: Track -->
+      <div class="tab-content active" id="tab-track">
+        <label class="upload-box" id="uploadBox">
+          <div class="icon">📂</div>
+          <p><strong>Klik atau drop file</strong></p>
+          <p>Mendukung .gpx dan .kml</p>
+          <input type="file" id="fileInput" accept=".gpx,.kml" />
+        </label>
+
+        <div id="infoMessage" class="info-message" style="display:none;"></div>
+
+
+        <div class="stats" id="stats">
+          <div class="stat-card">
+            <div class="label">Nama Track</div>
+            <div class="value" id="trackName">-</div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="label">Total Titik</div>
+              <div class="value" id="totalPoints">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Jarak</div>
+              <div class="value" id="distance">-<span class="unit">km</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Durasi</div>
+              <div class="value" id="duration">-</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Kec. Maks</div>
+              <div class="value" id="maxSpeed">-<span class="unit">km/h</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Kec. Rata2</div>
+              <div class="value" id="avgSpeed">-<span class="unit">km/h</span></div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Elevasi ▲/▼</div>
+              <div class="value" id="elevation">-<span class="unit">m</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="playback" id="playback">
+          <h3>▶ Playback</h3>
+          <div class="controls">
+            <button id="btnPlay" class="primary">Play</button>
+            <button id="btnReset">Reset</button>
+          </div>
+          <input type="range" id="slider" class="slider" min="0" max="100" value="0" />
+          <div class="current-point">
+            <span id="currentIdx">Titik 0 / 0</span>
+            <span id="currentSpeed">- km/h</span>
+          </div>
+          <div class="current-point">
+            <span id="currentTime">-</span>
+          </div>
+        </div>
+        <!-- Speed legend -->
+        <div class="speed-legend" id="speedLegend" style="display:none;">
+          <div class="label">Warna Kecepatan</div>
+          <div class="legend-swatches">
+            <span class="leg-sw" style="background:#ef4444">Berhenti</span>
+            <span class="leg-sw" style="background:#f97316">&lt;10</span>
+            <span class="leg-sw" style="background:#f59e0b">&lt;20</span>
+            <span class="leg-sw" style="background:#84cc16">&lt;35</span>
+            <span class="leg-sw" style="background:#22c55e">35+</span>
+            <span style="font-size:10px;color:#64748b;margin-left:2px;">km/h</span>
+          </div>
+        </div>
+
+        <button class="btn-save-route" id="btnSaveRoute">💾 Simpan Route ke Folder</button>
+      </div>
+
+      <!-- TAB: Geofence -->
+      <div class="tab-content" id="tab-geofence">
+        <div class="geofence-controls">
+          <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;">
+            Buat Geofence Baru
+          </h3>
+          <div class="gf-input-row">
+            <input type="text" id="gfName" placeholder="Nama (cth: Rumah, Kantor)" />
+            <input type="color" id="gfColor" value="#10b981" />
+          </div>
+          <div class="controls">
+            <button id="btnStartDraw" class="primary">✏️ Mulai Gambar</button>
+            <button id="btnCancelDraw" class="danger" disabled>Batal</button>
+          </div>
+          <div id="drawHint" class="draw-hint" style="display:none;">
+            <strong>Mode menggambar aktif</strong><br>
+            • <kbd>Klik</kbd> di map untuk tambah titik<br>
+            • <kbd>Double-click</kbd> untuk selesai<br>
+            • Minimal 3 titik
+          </div>
+        </div>
+
+        <div>
+          <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:8px;">
+            Geofence Tersimpan
+          </h3>
+          <div class="gf-list" id="gfList">
+            <div class="empty-text">Belum ada geofence</div>
+          </div>
+        </div>
+
+        <button id="btnClearGeofences" style="background:#dc2626;color:white;border:none;padding:8px;border-radius:4px;cursor:pointer;font-size:13px;">
+          🗑️ Hapus Semua Geofence
+        </button>
+      </div>
+
+      <!-- TAB: Events -->
+      <div class="tab-content" id="tab-events">
+        <div class="stat-card">
+          <div class="label">Total Events</div>
+          <div class="value" id="totalEvents">0</div>
+        </div>
+        <div>
+          <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:8px;">
+            Riwayat Masuk/Keluar
+          </h3>
+          <div class="events-log" id="eventsLog">
+            <div class="empty-text">Load track + buat geofence untuk lihat events</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB: History -->
+      <div class="tab-content" id="tab-history">
+        <div class="storage-section">
+          <h3>Penyimpanan Lokal</h3>
+          <div class="storage-status" id="storageStatus">Folder belum dipilih</div>
+          <button class="btn-setup-folder" id="btnSetupFolder">📁 Pilih Folder</button>
+        </div>
+        <div>
+          <h3 style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;margin-bottom:8px;">
+            Riwayat Track Tersimpan
+          </h3>
+          <div class="history-list" id="historyList">
+            <div class="empty-text">Belum ada track tersimpan</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div id="map"></div>
+  </div>
+
+  <script>
+    function loadLeaflet() {
+      return new Promise((resolve, reject) => {
+        const sources = [
+          'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+          'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+          'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'
+        ];
+        let i = 0;
+        function tryLoad() {
+          if (i >= sources.length) { reject(new Error('Semua CDN Leaflet gagal di-load.')); return; }
+          const s = document.createElement('script');
+          s.src = sources[i];
+          s.onload = () => {
+            if (typeof L !== 'undefined') { console.log('Leaflet loaded:', sources[i]); resolve(); }
+            else { i++; tryLoad(); }
+          };
+          s.onerror = () => { i++; tryLoad(); };
+          document.head.appendChild(s);
+        }
+        tryLoad();
+      });
+    }
+
+    loadLeaflet().then(initApp).catch(err => {
+      document.getElementById('map').innerHTML =
+        '<div style="padding:40px;text-align:center;color:#fca5a5;">' +
+        '<h2>❌ Gagal memuat Leaflet</h2><p>' + err.message + '</p></div>';
+    });
+
+    function initApp() {
+      let trackPoints = [];
+      let trackLayer = null, startMarker = null, endMarker = null, playbackMarker = null;
+      let geofences = [];
+      let dirHandle = null;
+      let historicalLayers = [];
+      let historicalData = [];
+      let currentTrackForSave = null;
+      let events = [];
+      let drawing = false;
+      let drawPoints = [];
+      let drawLayer = null;
+      let drawMarkers = [];
+      const STORAGE_KEY = 'gps_tracker_geofences_v1';
+
+      const map = L.map('map').setView([-6.2, 106.9], 12);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // TABS
+      document.querySelectorAll('.tab').forEach(t => {
+        t.addEventListener('click', () => {
+          document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+          document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+          t.classList.add('active');
+          document.getElementById('tab-' + t.dataset.tab).classList.add('active');
+        });
+      });
+
+      // FILE UPLOAD
+      const fileInput = document.getElementById('fileInput');
+      const uploadBox = document.getElementById('uploadBox');
+
+      fileInput.addEventListener('change', e => {
+        if (e.target.files.length) handleFile(e.target.files[0]);
+      });
+      uploadBox.addEventListener('dragover', e => { e.preventDefault(); uploadBox.classList.add('dragover'); });
+      uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('dragover'));
+      uploadBox.addEventListener('drop', e => {
+        e.preventDefault();
+        uploadBox.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+      });
+
+      function handleFile(file) {
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const content = ev.target.result;
+          const ext = file.name.toLowerCase().split('.').pop();
+          try {
+            if (ext === 'gpx') parseGPX(content, file.name);
+            else if (ext === 'kml') parseKML(content, file.name);
+            else throw new Error('Format tidak didukung');
+          } catch (err) {
+            showInfo('❌ Error: ' + err.message, 'error');
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      function parseGPX(xmlText, filename) {
+        const xml = new DOMParser().parseFromString(xmlText, 'text/xml');
+        if (xml.querySelector('parsererror')) throw new Error('GPX tidak valid');
+        const trkpts = xml.querySelectorAll('trkpt');
+        if (!trkpts.length) throw new Error('Tidak ada trackpoint');
+
+        const points = [];
+        trkpts.forEach(pt => {
+          const lat = parseFloat(pt.getAttribute('lat'));
+          const lon = parseFloat(pt.getAttribute('lon'));
+          const ele = parseFloat(pt.querySelector('ele')?.textContent || '0');
+          const time = pt.querySelector('time')?.textContent || null;
+          const speedMs = parseFloat(pt.querySelector('speed')?.textContent || '0');
+          if (!isNaN(lat) && !isNaN(lon)) {
+            points.push({ lat, lon, ele, time, speed: speedMs * 3.6 });
+          }
+        });
+        const name = xml.querySelector('trk > name')?.textContent || filename;
+        renderTrack(points, name, 'GPX');
+      }
+
+      function parseKML(xmlText, filename) {
+        const xml = new DOMParser().parseFromString(xmlText, 'text/xml');
+        if (xml.querySelector('parsererror')) throw new Error('KML tidak valid');
+        const coordsEl = xml.querySelector('LineString > coordinates') || xml.querySelector('coordinates');
+        if (!coordsEl) throw new Error('Tidak ada koordinat');
+
+        const points = coordsEl.textContent.trim().split(/\s+/).map(triple => {
+          const [lon, lat, ele] = triple.split(',').map(parseFloat);
+          return { lat, lon, ele: ele || 0, time: null, speed: 0 };
+        }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+
+        if (!points.length) throw new Error('Tidak ada koordinat valid');
+        const name = xml.querySelector('Placemark > name')?.textContent || filename;
+        renderTrack(points, name, 'KML');
+      }
+
+      function renderTrack(points, name, format) {
+        trackPoints = points;
+
+        if (trackLayer) map.removeLayer(trackLayer);
+        if (startMarker) map.removeLayer(startMarker);
+        if (endMarker) map.removeLayer(endMarker);
+        if (playbackMarker) map.removeLayer(playbackMarker);
+
+        const latlngs = points.map(p => [p.lat, p.lon]);
+        trackLayer = buildSpeedTrack(points).addTo(map);
+        document.getElementById('speedLegend').style.display =
+          points.some(p => p.speed > 0) ? 'flex' : 'none';
+        startMarker = L.marker(latlngs[0]).addTo(map).bindPopup('🟢 <b>Titik Awal</b>');
+        endMarker = L.marker(latlngs[latlngs.length-1]).addTo(map).bindPopup('🔴 <b>Titik Akhir</b>');
+
+        map.fitBounds(trackLayer.getBounds(), { padding: [40, 40] });
+
+        const stats = computeStats(points);
+        document.getElementById('trackName').textContent = name;
+        document.getElementById('totalPoints').textContent = points.length;
+        document.getElementById('distance').innerHTML = stats.distanceKm.toFixed(2) + '<span class="unit">km</span>';
+        document.getElementById('duration').textContent = stats.duration;
+        document.getElementById('maxSpeed').innerHTML = stats.maxSpeed.toFixed(1) + '<span class="unit">km/h</span>';
+        document.getElementById('avgSpeed').innerHTML = stats.avgSpeed.toFixed(1) + '<span class="unit">km/h</span>';
+        document.getElementById('elevation').innerHTML = stats.elevGain + '/' + stats.elevLoss + '<span class="unit">m</span>';
+        document.getElementById('stats').classList.add('visible');
+        document.getElementById('playback').classList.add('visible');
+
+        const slider = document.getElementById('slider');
+        slider.max = points.length - 1;
+        slider.value = 0;
+        updatePlaybackMarker(0);
+
+        if (format === 'KML') {
+          showInfo('ℹ️ KML tidak ada data waktu & kecepatan per titik. Gunakan GPX untuk data lengkap.', 'info');
+        } else {
+          showInfo('✅ GPX berhasil dibaca. ' + points.length + ' titik dimuat.', 'success');
+        }
+
+        currentTrackForSave = { points, name, format, stats };
+        document.getElementById('btnSaveRoute').style.display = 'block';
+        recalculateAllEvents();
+      }
+
+      function computeStats(points) {
+        let distanceKm = 0, maxSpeed = 0, sumSpeed = 0, speedCount = 0;
+        let elevGain = 0, elevLoss = 0;
+        for (let i = 1; i < points.length; i++) {
+          distanceKm += haversine(points[i-1], points[i]);
+          if (points[i].speed > 0) {
+            maxSpeed = Math.max(maxSpeed, points[i].speed);
+            sumSpeed += points[i].speed;
+            speedCount++;
+          }
+          const dEle = points[i].ele - points[i-1].ele;
+          if (dEle > 0) elevGain += dEle; else elevLoss += -dEle;
+        }
+        const avgSpeed = speedCount ? sumSpeed/speedCount : 0;
+        const first = points[0].time ? new Date(points[0].time) : null;
+        const last = points[points.length-1].time ? new Date(points[points.length-1].time) : null;
+        let duration = '-';
+        if (first && last) {
+          const ms = last - first;
+          const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000);
+          duration = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        }
+        return { distanceKm, maxSpeed, avgSpeed, elevGain: Math.round(elevGain), elevLoss: Math.round(elevLoss), duration };
+      }
+
+      // ============================================================
+      // Speed-colored track helpers
+      // ============================================================
+      function getSpeedColor(speed) {
+        if (speed <= 0)  return '#ef4444';
+        if (speed < 10)  return '#f97316';
+        if (speed < 20)  return '#f59e0b';
+        if (speed < 35)  return '#84cc16';
+        return '#22c55e';
+      }
+
+      function buildSpeedTrack(points) {
+        const hasSpeed = points.some(p => p.speed > 0);
+        if (!hasSpeed) {
+          return L.polyline(points.map(p => [p.lat, p.lon]), { color: '#3b82f6', weight: 4, opacity: 0.85 });
+        }
+        const layers = [];
+        let segStart = 0;
+        for (let i = 0; i < points.length - 1; i++) {
+          const curColor = getSpeedColor(points[i].speed);
+          const nextColor = (i + 1 < points.length - 1) ? getSpeedColor(points[i + 1].speed) : null;
+          if (nextColor !== curColor) {
+            layers.push(L.polyline(
+              points.slice(segStart, i + 2).map(p => [p.lat, p.lon]),
+              { color: curColor, weight: 5, opacity: 0.9 }
+            ));
+            segStart = i + 1;
+          }
+        }
+        if (segStart < points.length - 1) {
+          layers.push(L.polyline(
+            points.slice(segStart).map(p => [p.lat, p.lon]),
+            { color: getSpeedColor(points[segStart].speed), weight: 5, opacity: 0.9 }
+          ));
+        }
+        return L.featureGroup(layers);
+      }
+
+      function haversine(a, b) {
+        const R = 6371, toRad = d => d * Math.PI/180;
+        const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
+        const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
+        const x = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+        return 2 * R * Math.asin(Math.sqrt(x));
+      }
+
+      function formatTime(d) {
+        return d.toLocaleString('id-ID', {
+          day: '2-digit', month: 'short',
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+      }
+
+      // PLAYBACK
+      const slider = document.getElementById('slider');
+      const btnPlay = document.getElementById('btnPlay');
+      const btnReset = document.getElementById('btnReset');
+      let playInterval = null;
+
+      slider.addEventListener('input', e => updatePlaybackMarker(parseInt(e.target.value)));
+
+      btnPlay.addEventListener('click', () => {
+        if (playInterval) {
+          clearInterval(playInterval); playInterval = null;
+          btnPlay.textContent = 'Play'; return;
+        }
+        btnPlay.textContent = 'Pause';
+        playInterval = setInterval(() => {
+          let idx = parseInt(slider.value);
+          if (idx >= trackPoints.length - 1) {
+            clearInterval(playInterval); playInterval = null;
+            btnPlay.textContent = 'Play'; return;
+          }
+          idx++;
+          slider.value = idx;
+          updatePlaybackMarker(idx);
+        }, 80);
+      });
+
+      btnReset.addEventListener('click', () => {
+        if (playInterval) { clearInterval(playInterval); playInterval = null; btnPlay.textContent = 'Play'; }
+        slider.value = 0;
+        updatePlaybackMarker(0);
+      });
+
+      function updatePlaybackMarker(idx) {
+        if (!trackPoints.length) return;
+        const p = trackPoints[idx];
+        if (playbackMarker) map.removeLayer(playbackMarker);
+        playbackMarker = L.marker([p.lat, p.lon], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div style="font-size:22px;line-height:1;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.6));">🏍️</div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
+          }),
+          zIndexOffset: 1000
+        }).addTo(map);
+
+        let inside = [];
+        geofences.forEach(gf => {
+          if (pointInPolygon(p, gf.latlngs)) inside.push(gf.name);
+        });
+
+        const speedTxt = p.speed > 0 ? `${p.speed.toFixed(1)} km/h` : '-';
+        const insideTxt = inside.length ? ` 📍 ${inside.join(', ')}` : '';
+        document.getElementById('currentIdx').textContent = `Titik ${idx+1}/${trackPoints.length}${insideTxt}`;
+        document.getElementById('currentSpeed').textContent = speedTxt;
+        document.getElementById('currentTime').textContent = p.time ? formatTime(new Date(p.time)) : '-';
+      }
+
+      // GEOFENCE DRAWING
+      const btnStartDraw = document.getElementById('btnStartDraw');
+      const btnCancelDraw = document.getElementById('btnCancelDraw');
+      const drawHint = document.getElementById('drawHint');
+
+      btnStartDraw.addEventListener('click', () => {
+        const name = document.getElementById('gfName').value.trim();
+        if (!name) { alert('Masukkan nama geofence dulu'); return; }
+        startDrawing();
+      });
+
+      btnCancelDraw.addEventListener('click', cancelDrawing);
+
+      function startDrawing() {
+        drawing = true;
+        drawPoints = [];
+        drawMarkers = [];
+        map.getContainer().classList.add('drawing-cursor');
+        btnStartDraw.disabled = true;
+        btnCancelDraw.disabled = false;
+        drawHint.style.display = 'block';
+        map.doubleClickZoom.disable();
+      }
+
+      function cancelDrawing() {
+        drawing = false;
+        drawPoints = [];
+        if (drawLayer) { map.removeLayer(drawLayer); drawLayer = null; }
+        drawMarkers.forEach(m => map.removeLayer(m));
+        drawMarkers = [];
+        map.getContainer().classList.remove('drawing-cursor');
+        btnStartDraw.disabled = false;
+        btnCancelDraw.disabled = true;
+        drawHint.style.display = 'none';
+        map.doubleClickZoom.enable();
+      }
+
+      map.on('click', e => {
+        if (!drawing) return;
+        drawPoints.push([e.latlng.lat, e.latlng.lng]);
+
+        const m = L.circleMarker(e.latlng, {
+          radius: 5, color: '#fff', fillColor: '#3b82f6', fillOpacity: 1, weight: 2
+        }).addTo(map);
+        drawMarkers.push(m);
+
+        if (drawLayer) map.removeLayer(drawLayer);
+        const color = document.getElementById('gfColor').value;
+        if (drawPoints.length >= 2) {
+          drawLayer = L.polyline(drawPoints, { color, weight: 3, dashArray: '5,5' }).addTo(map);
+        }
+      });
+
+      map.on('dblclick', e => {
+        if (!drawing) return;
+        e.originalEvent.preventDefault();
+        if (drawPoints.length < 3) {
+          alert('Minimal 3 titik untuk polygon');
+          return;
+        }
+        finalizeGeofence();
+      });
+
+      function finalizeGeofence() {
+        const name = document.getElementById('gfName').value.trim();
+        const color = document.getElementById('gfColor').value;
+        const gf = {
+          id: 'gf_' + Date.now(),
+          name, color,
+          latlngs: drawPoints.slice(),
+          layer: null
+        };
+
+        gf.layer = L.polygon(gf.latlngs, {
+          color, fillColor: color, fillOpacity: 0.2, weight: 2
+        }).addTo(map).bindPopup(`<b>${name}</b>`);
+
+        geofences.push(gf);
+        saveGeofences();
+        renderGeofenceList();
+        cancelDrawing();
+        document.getElementById('gfName').value = '';
+        recalculateAllEvents();
+      }
+
+      function renderGeofenceList() {
+        const el = document.getElementById('gfList');
+        if (!geofences.length) {
+          el.innerHTML = '<div class="empty-text">Belum ada geofence</div>';
+          return;
+        }
+        el.innerHTML = '';
+        geofences.forEach(gf => {
+          const item = document.createElement('div');
+          item.className = 'gf-item';
+          item.innerHTML = `
+            <div class="gf-color-dot" style="background:${gf.color}"></div>
+            <div class="gf-item-name">${escapeHtml(gf.name)}</div>
+            <div class="gf-item-points">${gf.latlngs.length} pts</div>
+            <button data-id="${gf.id}" title="Hapus">✕</button>
+          `;
+          item.querySelector('button').addEventListener('click', e => {
+            e.stopPropagation();
+            removeGeofence(gf.id);
+          });
+          item.addEventListener('click', () => {
+            map.fitBounds(gf.layer.getBounds(), { padding: [40, 40] });
+            gf.layer.openPopup();
+          });
+          el.appendChild(item);
+        });
+      }
+
+      function removeGeofence(id) {
+        const gf = geofences.find(g => g.id === id);
+        if (!gf) return;
+        map.removeLayer(gf.layer);
+        geofences = geofences.filter(g => g.id !== id);
+        saveGeofences();
+        renderGeofenceList();
+        recalculateAllEvents();
+      }
+
+      document.getElementById('btnClearGeofences').addEventListener('click', () => {
+        if (!geofences.length) return;
+        if (!confirm('Hapus semua geofence?')) return;
+        geofences.forEach(gf => map.removeLayer(gf.layer));
+        geofences = [];
+        saveGeofences();
+        renderGeofenceList();
+        recalculateAllEvents();
+      });
+
+      function saveGeofences() {
+        try {
+          const data = geofences.map(gf => ({
+            id: gf.id, name: gf.name, color: gf.color, latlngs: gf.latlngs
+          }));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } catch(e) { console.warn('Storage error:', e); }
+        saveGeofencesToFile();
+      }
+
+      function loadGeofences() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          const data = JSON.parse(raw);
+          data.forEach(gf => {
+            gf.layer = L.polygon(gf.latlngs, {
+              color: gf.color, fillColor: gf.color, fillOpacity: 0.2, weight: 2
+            }).addTo(map).bindPopup(`<b>${gf.name}</b>`);
+            geofences.push(gf);
+          });
+          renderGeofenceList();
+        } catch(e) { console.warn('Load error:', e); }
+      }
+
+      async function saveGeofencesToFile() {
+        if (!dirHandle) return;
+        try {
+          const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') return;
+          const payload = {
+            savedAt: new Date().toISOString(),
+            geofences: geofences.map(gf => ({
+              id: gf.id, name: gf.name, color: gf.color, latlngs: gf.latlngs
+            }))
+          };
+          const fh = await dirHandle.getFileHandle('geofences.json', { create: true });
+          const writable = await fh.createWritable();
+          await writable.write(JSON.stringify(payload, null, 2));
+          await writable.close();
+        } catch(e) { console.error('Save geofences error:', e); }
+      }
+
+      async function loadGeofencesFromFile() {
+        if (!dirHandle) return;
+        try {
+          const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') return;
+          let fh;
+          try { fh = await dirHandle.getFileHandle('geofences.json'); }
+          catch(_) { return; }
+          const payload = JSON.parse(await (await fh.getFile()).text());
+          if (!payload.geofences || !Array.isArray(payload.geofences)) return;
+          geofences.forEach(gf => { try { map.removeLayer(gf.layer); } catch(_) {} });
+          geofences = [];
+          payload.geofences.forEach(gf => {
+            gf.layer = L.polygon(gf.latlngs, {
+              color: gf.color, fillColor: gf.color, fillOpacity: 0.2, weight: 2
+            }).addTo(map).bindPopup('<b>' + gf.name + '</b>');
+            geofences.push(gf);
+          });
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(
+              payload.geofences.map(gf => ({ id: gf.id, name: gf.name, color: gf.color, latlngs: gf.latlngs }))
+            ));
+          } catch(_) {}
+          renderGeofenceList();
+          recalculateAllEvents();
+        } catch(e) { console.warn('Load geofences from file:', e); }
+      }
+
+      // Ray casting point-in-polygon
+      function pointInPolygon(point, polygon) {
+        const x = point.lon, y = point.lat;
+        let inside = false;
+        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+          const xi = polygon[i][1], yi = polygon[i][0];
+          const xj = polygon[j][1], yj = polygon[j][0];
+          const intersect = ((yi > y) !== (yj > y)) &&
+            (x < (xj - xi) * (y - yi) / (yj - yi + 0.0000001) + xi);
+          if (intersect) inside = !inside;
+        }
+        return inside;
+      }
+
+      function recalculateAllEvents() {
+        events = [];
+        if (!trackPoints.length || !geofences.length) {
+          renderEvents();
+          return;
+        }
+
+        geofences.forEach(gf => {
+          let wasInside = false;
+          let enterTime = null;
+
+          for (let i = 0; i < trackPoints.length; i++) {
+            const p = trackPoints[i];
+            const isInside = pointInPolygon(p, gf.latlngs);
+
+            if (isInside && !wasInside) {
+              wasInside = true;
+              enterTime = p.time ? new Date(p.time) : null;
+              events.push({
+                type: 'enter', geofenceId: gf.id, geofenceName: gf.name,
+                color: gf.color, time: enterTime, pointIdx: i
+              });
+            } else if (!isInside && wasInside) {
+              wasInside = false;
+              const exitTime = p.time ? new Date(p.time) : null;
+              let duration = null;
+              if (enterTime && exitTime) duration = exitTime - enterTime;
+              events.push({
+                type: 'exit', geofenceId: gf.id, geofenceName: gf.name,
+                color: gf.color, time: exitTime, pointIdx: i, duration
+              });
+            }
+          }
+
+          if (wasInside) {
+            const lastP = trackPoints[trackPoints.length-1];
+            const lastTime = lastP.time ? new Date(lastP.time) : null;
+            let duration = null;
+            if (enterTime && lastTime) duration = lastTime - enterTime;
+            events.push({
+              type: 'still-inside', geofenceId: gf.id, geofenceName: gf.name,
+              color: gf.color, time: lastTime, pointIdx: trackPoints.length - 1, duration
+            });
+          }
+        });
+
+        events.sort((a, b) => a.pointIdx - b.pointIdx);
+        renderEvents();
+      }
+
+      function renderEvents() {
+        document.getElementById('totalEvents').textContent = events.length;
+        const el = document.getElementById('eventsLog');
+
+        if (!events.length) {
+          el.innerHTML = '<div class="empty-text">Belum ada event. Load track + buat geofence dulu.</div>';
+          return;
+        }
+
+        el.innerHTML = '';
+        events.forEach(ev => {
+          const item = document.createElement('div');
+          item.className = 'event-item';
+          item.style.borderLeftColor = ev.color;
+
+          const icon = ev.type === 'enter' ? '🟢 MASUK'
+            : ev.type === 'exit' ? '🟡 KELUAR'
+            : '🔵 MASIH DI DALAM (sampai akhir track)';
+          const timeTxt = ev.time ? formatTime(ev.time) : `Titik ke-${ev.pointIdx+1}`;
+          let durTxt = '';
+          if (ev.duration) {
+            const mins = Math.floor(ev.duration / 60000);
+            const secs = Math.floor((ev.duration % 60000) / 1000);
+            durTxt = `<div class="event-duration">⏱️ Total durasi di dalam: ${mins}m ${secs}s</div>`;
+          }
+
+          item.innerHTML = `
+            <div class="event-type">${icon} — ${escapeHtml(ev.geofenceName)}</div>
+            <div class="event-time">${timeTxt}</div>
+            ${durTxt}
+          `;
+
+          item.addEventListener('click', () => {
+            if (trackPoints[ev.pointIdx]) {
+              const p = trackPoints[ev.pointIdx];
+              map.setView([p.lat, p.lon], 17);
+              document.getElementById('slider').value = ev.pointIdx;
+              updatePlaybackMarker(ev.pointIdx);
+            }
+          });
+
+          el.appendChild(item);
+        });
+      }
+
+      function escapeHtml(s) {
+        const div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      function showInfo(message, type) {
+        const el = document.getElementById('infoMessage');
+        el.textContent = message;
+        el.style.display = 'block';
+        const colors = {
+          error:   { bg: '#7f1d1d30', border: '#dc2626', text: '#fca5a5' },
+          success: { bg: '#14532d30', border: '#16a34a', text: '#86efac' },
+          info:    { bg: '#1e3a8a30', border: '#1e40af', text: '#93c5fd' }
+        };
+        const c = colors[type] || colors.info;
+        el.style.background = c.bg;
+        el.style.border = '1px solid ' + c.border;
+        el.style.color = c.text;
+      }
+
+      loadGeofences();
+
+      // ============================================================
+      // Storage: IndexedDB handle persistence
+      // ============================================================
+      function openIDB() {
+        return new Promise((resolve, reject) => {
+          const req = indexedDB.open('bikeTrackerDB', 1);
+          req.onupgradeneeded = e => e.target.result.createObjectStore('handles');
+          req.onsuccess = e => resolve(e.target.result);
+          req.onerror = e => reject(e.target.error);
+        });
+      }
+
+      async function initStorage() {
+        if (!('showDirectoryPicker' in window)) {
+          document.getElementById('storageStatus').textContent = 'Perlu Chrome/Edge untuk fitur ini';
+          document.getElementById('btnSetupFolder').disabled = true;
+          return;
+        }
+        try {
+          const db = await openIDB();
+          const handle = await new Promise((res, rej) => {
+            const tx = db.transaction('handles', 'readonly');
+            const req = tx.objectStore('handles').get('dirHandle');
+            req.onsuccess = e => res(e.target.result || null);
+            req.onerror = e => rej(e.target.error);
+          });
+          if (!handle) return;
+          dirHandle = handle;
+          const perm = await handle.queryPermission({ mode: 'readwrite' });
+          const statusEl = document.getElementById('storageStatus');
+          if (perm === 'granted') {
+            statusEl.textContent = '📂 ' + handle.name;
+            statusEl.classList.add('ok');
+            await loadHistoricalTracks();
+            await loadGeofencesFromFile();
+          } else {
+            statusEl.textContent = '📂 ' + handle.name + ' (klik untuk izinkan akses)';
+          }
+        } catch(e) { console.warn('Storage init:', e); }
+      }
+
+      document.getElementById('btnSetupFolder').addEventListener('click', async () => {
+        if (!('showDirectoryPicker' in window)) return;
+        try {
+          const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+          const db = await openIDB();
+          await new Promise((res, rej) => {
+            const tx = db.transaction('handles', 'readwrite');
+            tx.objectStore('handles').put(handle, 'dirHandle');
+            tx.oncomplete = res;
+            tx.onerror = e => rej(e.target.error);
+          });
+          dirHandle = handle;
+          const statusEl = document.getElementById('storageStatus');
+          statusEl.textContent = '📂 ' + handle.name;
+          statusEl.classList.add('ok');
+          await loadHistoricalTracks();
+          await loadGeofencesFromFile();
+          showInfo('✅ Folder penyimpanan dipilih: ' + handle.name, 'success');
+        } catch(e) {
+          if (e.name !== 'AbortError') showInfo('❌ Gagal akses folder: ' + e.message, 'error');
+        }
+      });
+
+      document.getElementById('btnSaveRoute').addEventListener('click', async () => {
+        if (!currentTrackForSave) return;
+        if (!dirHandle) {
+          showInfo('⚠️ Pilih folder penyimpanan dulu di tab History', 'info');
+          return;
+        }
+        const btn = document.getElementById('btnSaveRoute');
+        btn.disabled = true;
+        btn.textContent = '⏳ Menyimpan...';
+        const filename = await saveTrackToFile(currentTrackForSave);
+        if (filename) {
+          showInfo('💾 Route tersimpan: ' + filename, 'success');
+          btn.style.display = 'none';
+          currentTrackForSave = null;
+          await loadHistoricalTracks();
+        }
+        btn.disabled = false;
+        btn.textContent = '💾 Simpan Route ke Folder';
+      });
+
+      async function saveTrackToFile({ points, name, format, stats }) {
+        if (!dirHandle) return null;
+        try {
+          const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') return null;
+          const now = new Date();
+          const dateStr = now.toISOString().slice(0, 19).replace(/[T:]/g, '-');
+          const safeName = name.replace(/[^\w\-]/g, '_').slice(0, 40);
+          const filename = 'track_' + dateStr + '_' + safeName + '.json';
+          const payload = { name, savedAt: now.toISOString(), sourceFile: name, format, stats, points };
+          const fh = await dirHandle.getFileHandle(filename, { create: true });
+          const writable = await fh.createWritable();
+          await writable.write(JSON.stringify(payload, null, 2));
+          await writable.close();
+          return filename;
+        } catch(e) { console.error('Save error:', e); return null; }
+      }
+
+      async function loadHistoricalTracks() {
+        if (!dirHandle) return;
+        try {
+          const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') return;
+          historicalLayers.forEach(l => { try { map.removeLayer(l); } catch(_) {} });
+          historicalLayers = [];
+          historicalData = [];
+          for await (const [fname, fh] of dirHandle.entries()) {
+            if (fh.kind !== 'file' || !fname.startsWith('track_') || !fname.endsWith('.json')) continue;
+            try {
+              const file = await fh.getFile();
+              const data = JSON.parse(await file.text());
+              if (data.points && data.points.length > 1) {
+                historicalData.push({ ...data, filename: fname });
+              }
+            } catch(_) { console.warn('Skip:', fname); }
+          }
+          historicalData.sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+          historicalData.forEach(td => {
+            const group = buildSpeedTrack(td.points);
+            group.setStyle({ opacity: 0.4, weight: 3 });
+            group.addTo(map);
+            group.on('click', () => {
+              try { map.fitBounds(group.getBounds(), { padding: [40, 40] }); } catch(_) {}
+            });
+            historicalLayers.push(group);
+          });
+          renderHistoryList();
+        } catch(e) { console.warn('Load history:', e); }
+      }
+
+      function renderHistoryList() {
+        const list = document.getElementById('historyList');
+        if (!historicalData.length) {
+          list.innerHTML = '<div class="empty-text">Belum ada route tersimpan</div>';
+          return;
+        }
+        list.innerHTML = '';
+        historicalData.forEach((td, i) => {
+          const item = document.createElement('div');
+          item.className = 'history-item';
+          const dateStr = new Date(td.savedAt).toLocaleDateString('id-ID', {
+            day: '2-digit', month: 'short', year: 'numeric'
+          });
+          const dist = td.stats && td.stats.distanceKm
+            ? td.stats.distanceKm.toFixed(1) + ' km' : '-';
+
+          const header = document.createElement('div');
+          header.className = 'hi-header';
+
+          const nameEl = document.createElement('span');
+          nameEl.className = 'hi-name-text';
+          nameEl.title = 'Klik untuk zoom ke route';
+          nameEl.textContent = td.name;
+          nameEl.addEventListener('click', () => {
+            renderTrack(td.points, td.name, td.format);
+            document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(x => x.classList.remove('active'));
+            document.querySelector('.tab[data-tab="track"]').classList.add('active');
+            document.getElementById('tab-track').classList.add('active');
+            document.getElementById('btnSaveRoute').style.display = 'none';
+            currentTrackForSave = null;
+          });
+
+          const actions = document.createElement('div');
+          actions.className = 'hi-actions';
+
+          const btnRename = document.createElement('button');
+          btnRename.className = 'hi-btn';
+          btnRename.title = 'Rename';
+          btnRename.textContent = '✎';
+          btnRename.addEventListener('click', () => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'hi-rename-input';
+            input.value = td.name;
+            header.replaceChild(input, nameEl);
+            input.focus();
+            input.select();
+            const commit = () => renameHistoryItem(i, input.value);
+            input.addEventListener('blur', commit);
+            input.addEventListener('keydown', e => {
+              if (e.key === 'Enter') input.blur();
+              if (e.key === 'Escape') header.replaceChild(nameEl, input);
+            });
+          });
+
+          const btnDel = document.createElement('button');
+          btnDel.className = 'hi-btn del';
+          btnDel.title = 'Hapus';
+          btnDel.textContent = '🗑';
+          btnDel.addEventListener('click', () => deleteHistoryItem(i));
+
+          actions.appendChild(btnRename);
+          actions.appendChild(btnDel);
+          header.appendChild(nameEl);
+          header.appendChild(actions);
+
+          const meta = document.createElement('div');
+          meta.className = 'hi-meta';
+          meta.textContent = dateStr + ' · ' + dist + ' · ' + td.format;
+
+          item.appendChild(header);
+          item.appendChild(meta);
+          list.appendChild(item);
+        });
+      }
+
+      async function deleteHistoryItem(i) {
+        if (!confirm('Hapus route "' + historicalData[i].name + '"?')) return;
+        try {
+          const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') return;
+          if (historicalLayers[i]) { try { map.removeLayer(historicalLayers[i]); } catch(_) {} }
+          await dirHandle.removeEntry(historicalData[i].filename);
+          historicalLayers.splice(i, 1);
+          historicalData.splice(i, 1);
+          renderHistoryList();
+        } catch(e) { showInfo('❌ Gagal hapus: ' + e.message, 'error'); }
+      }
+
+      async function renameHistoryItem(i, newName) {
+        newName = newName.trim();
+        if (!newName || newName === historicalData[i].name) { renderHistoryList(); return; }
+        try {
+          const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+          if (perm !== 'granted') return;
+          const fh = await dirHandle.getFileHandle(historicalData[i].filename);
+          const data = JSON.parse(await (await fh.getFile()).text());
+          data.name = newName;
+          const writable = await fh.createWritable();
+          await writable.write(JSON.stringify(data, null, 2));
+          await writable.close();
+          historicalData[i].name = newName;
+          renderHistoryList();
+        } catch(e) { showInfo('❌ Gagal rename: ' + e.message, 'error'); renderHistoryList(); }
+      }
+
+      initStorage();
+    }
+  </script>
+</body>
+</html>
