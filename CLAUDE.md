@@ -4,11 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Running the app
 
-No build step. Open either HTML file directly in Chrome or Edge:
-- `index.html` — basic GPS track viewer
-- `gps-tracker.html` — advanced viewer with geofencing and history
+No build step. Open directly in Chrome or Edge:
+- `vms.html` — **primary app** — Vehicle Monitoring System (VMS), full fleet management
+- `index.html` — legacy GPS track viewer
+- `gps-tracker.html` — legacy advanced viewer with geofencing
 
-**File System Access API features require Chrome or Edge** (not Firefox). To serve locally:
+**Chrome/Edge only** (File System Access API + Leaflet). To serve locally:
 ```
 npx serve .
 # or
@@ -16,6 +17,35 @@ python -m http.server 8080
 ```
 
 ## Architecture
+
+### vms.html (primary — Vehicle Monitoring System)
+
+Single-file, zero-dependency. All page functions called by router `navigate(id)`. Leaflet lazy-loaded only when Tracking/Geofences page is opened.
+
+**localStorage keys** (prefix `vms_`):
+```javascript
+const KEYS = {
+  vehicles, drivers, driverLicenses, vehicleLicenses,
+  geofences, trips, fuelLogs, maintenance, spareParts
+}
+```
+
+**Router pattern**: `PAGES[id](mainEl)` — each page function re-renders `el.innerHTML` on every call.
+
+**Cross-page data passing**: `window._pendingTripId` — set before `navigate('tracking')` to auto-load a trip.
+
+**Key patterns**:
+- `window.openXxxForm(id?)` — CRUD modals, defined inside each page function, scoped as globals
+- `window.maintAutoSuggest()` / `window.partAutoSuggest()` — auto-fill next due from service intervals
+- `estOdometer(vehicleId)` — estimates current km from `Math.max` of all fuel log odometers
+- Open interval in Fuel Report: `t.date >= lastLog.date` (string compare — trips have no time field)
+- Backward compat: maintenance records may have `m.type` (string, old) or `m.types` (array, new)
+
+**Export/Import**: sidebar footer buttons, dumps all KEYS to/from single JSON file.
+
+---
+
+### gps-tracker.html / index.html (legacy)
 
 Two standalone, zero-dependency single-file HTML apps. All logic lives inside `initApp()` which is called only after Leaflet loads from CDN (3-source fallback chain: cdnjs → unpkg → jsdelivr).
 
