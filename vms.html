@@ -1,0 +1,2156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VMS — Vehicle Monitoring System</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+    onerror="this.onerror=null;this.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'">
+  <style>
+    :root {
+      --bg:      #0d0f14;
+      --surface: #111318;
+      --card:    #1a1d24;
+      --border:  #252830;
+      --accent:  #4f7af8;
+      --accent-h:#3d68e6;
+      --danger:  #ef4444;
+      --warning: #f59e0b;
+      --success: #22c55e;
+      --text:    #e8eaf0;
+      --muted:   #7b8099;
+      --subtle:  #3a3e50;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      background: var(--bg); color: var(--text);
+      height: 100vh; overflow: hidden; font-size: 14px; line-height: 1.5;
+    }
+    #app { display: flex; height: 100vh; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 220px; min-width: 220px;
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden;
+    }
+    #sidebar::-webkit-scrollbar { width: 4px; }
+    #sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .brand { padding: 20px 16px 16px; border-bottom: 1px solid var(--border); }
+    .brand-name { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+    .brand-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    .nav-section {
+      padding: 16px 16px 4px;
+      font-size: 10px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--subtle);
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 9px;
+      padding: 8px 16px; cursor: pointer; color: var(--muted);
+      font-size: 13.5px; transition: all 0.12s;
+      border-left: 2px solid transparent; user-select: none;
+    }
+    .nav-item:hover { background: rgba(79,122,248,0.06); color: var(--text); }
+    .nav-item.active { background: rgba(79,122,248,0.1); color: var(--accent); border-left-color: var(--accent); }
+    .nav-item svg { flex-shrink: 0; opacity: 0.7; }
+    .nav-item.active svg, .nav-item:hover svg { opacity: 1; }
+
+    /* ── Main ── */
+    #main { flex: 1; overflow-y: auto; background: var(--bg); }
+    #main::-webkit-scrollbar { width: 6px; }
+    #main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Page ── */
+    .page { padding: 28px 32px; max-width: 1200px; }
+    .page-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px;
+    }
+    .page-title { font-size: 20px; font-weight: 600; }
+    .page-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 6px; border: none;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all 0.12s; white-space: nowrap; font-family: inherit;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-h); }
+    .btn-secondary { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { background: var(--border); }
+    .btn-danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn-ghost { background: transparent; color: var(--muted); border: none; }
+    .btn-ghost:hover { color: var(--text); background: var(--card); }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    thead tr { background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); }
+    th {
+      padding: 10px 14px; text-align: left;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--muted); white-space: nowrap;
+    }
+    td { padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,0.015); }
+    .td-actions { display: flex; gap: 4px; }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+    }
+    .badge-success { background: rgba(34,197,94,0.12); color: var(--success); }
+    .badge-warning { background: rgba(245,158,11,0.12); color: var(--warning); }
+    .badge-danger  { background: rgba(239,68,68,0.12);  color: var(--danger); }
+    .badge-muted   { background: rgba(123,128,153,0.12); color: var(--muted); }
+    .badge-accent  { background: rgba(79,122,248,0.12);  color: var(--accent); }
+
+    /* ── Forms ── */
+    .form-grid   { display: grid; gap: 14px; }
+    .form-grid-2 { grid-template-columns: 1fr 1fr; }
+    .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .form-group  { display: flex; flex-direction: column; gap: 5px; }
+    label { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: 0.02em; }
+    input, select, textarea {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      padding: 8px 11px; border-radius: 6px; font-size: 13.5px;
+      font-family: inherit; transition: border-color 0.12s; outline: none; width: 100%;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    select option { background: var(--card); }
+    textarea { resize: vertical; min-height: 72px; }
+
+    /* ── Cards ── */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 24px; }
+    .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; }
+    .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 8px; }
+    .kpi-value { font-size: 28px; font-weight: 700; line-height: 1; }
+    .kpi-sub   { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+
+    /* ── Section ── */
+    .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+    .section-gap { margin-bottom: 28px; }
+
+    /* ── Alert list ── */
+    .alert-list { display: flex; flex-direction: column; gap: 8px; }
+    .alert-item {
+      display: flex; align-items: center; gap: 12px; justify-content: space-between;
+      padding: 10px 14px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 6px; font-size: 13px;
+    }
+    .alert-item.warn { border-left: 3px solid var(--warning); }
+    .alert-item.crit { border-left: 3px solid var(--danger); }
+    .alert-info { font-weight: 500; }
+    .alert-meta { color: var(--muted); font-size: 12px; }
+
+    /* ── Empty state ── */
+    .empty-state { text-align: center; padding: 48px 24px; color: var(--muted); }
+    .empty-state .empty-icon { font-size: 32px; opacity: 0.3; margin-bottom: 8px; }
+    .empty-state p { font-size: 13.5px; margin-top: 4px; }
+
+    /* ── Modal ── */
+    #modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+      display: none; align-items: center; justify-content: center;
+      z-index: 1000; backdrop-filter: blur(2px);
+    }
+    #modal-backdrop.open { display: flex; }
+    #modal-box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      width: 540px; max-width: 95vw; max-height: 90vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.55);
+    }
+    #modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    #modal-title  { font-size: 15px; font-weight: 600; }
+    .modal-close  { background: transparent; border: none; color: var(--muted); font-size: 22px; cursor: pointer; padding: 0 2px; line-height: 1; transition: color 0.12s; }
+    .modal-close:hover { color: var(--text); }
+    #modal-body   { padding: 20px; overflow-y: auto; flex: 1; }
+    #modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--border); }
+
+    /* ── Toast ── */
+    #toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 2000; }
+    .toast { padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; animation: slideIn 0.2s ease; max-width: 320px; border-left: 3px solid; }
+    .toast-success { background: #0c1f14; border-color: var(--success); color: #86efac; }
+    .toast-error   { background: #1f0d0d; border-color: var(--danger);  color: #fca5a5; }
+    .toast-info    { background: #0d1430; border-color: var(--accent);   color: #93c5fd; }
+    @keyframes slideIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* ── Upload box ── */
+    .upload-box {
+      border: 2px dashed var(--border); border-radius: 8px; padding: 24px 16px;
+      text-align: center; cursor: pointer; transition: all 0.2s; background: transparent; display: block;
+    }
+    .upload-box:hover, .upload-box.dragover { border-color: var(--accent); background: rgba(79,122,248,0.04); }
+    .upload-box-title { font-size: 13.5px; font-weight: 500; margin-bottom: 4px; }
+    .upload-box-sub   { font-size: 12px; color: var(--muted); }
+
+    /* ── Tracking layout ── */
+    .tracking-layout { display: flex; height: 100%; overflow: hidden; }
+    .tracking-panel {
+      width: 320px; min-width: 320px; background: var(--surface); border-right: 1px solid var(--border);
+      overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    }
+    .tracking-panel::-webkit-scrollbar { width: 4px; }
+    .tracking-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    #tracking-map { flex: 1; }
+    .panel-section { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+    .panel-section-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin-bottom: 10px; }
+    .stats-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-item .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 2px; }
+    .stat-item .stat-value { font-size: 15px; font-weight: 600; }
+    .stat-item .stat-unit  { font-size: 11px; color: var(--muted); margin-left: 2px; }
+    .slider-input { width: 100%; cursor: pointer; accent-color: var(--accent); }
+    .playback-info { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+
+    /* ── Speed legend ── */
+    .speed-legend { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+    .speed-swatch { font-size: 10px; color: #fff; padding: 2px 7px; border-radius: 3px; font-weight: 600; }
+
+    /* ── Filter bar ── */
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+    .filter-bar select, .filter-bar input { max-width: 200px; padding: 7px 10px; }
+
+    /* ── Chart ── */
+    .chart-wrap { overflow-x: auto; }
+    .chart-bars { display: flex; gap: 2px; align-items: flex-end; height: 160px; padding: 0 4px; }
+    .chart-bar-group { display: flex; gap: 2px; align-items: flex-end; }
+    .chart-bar { border-radius: 3px 3px 0 0; min-width: 18px; transition: opacity 0.15s; }
+    .chart-bar:hover { opacity: 0.8; }
+    .chart-labels { display: flex; gap: 2px; margin-top: 6px; }
+    .chart-label { font-size: 10px; color: var(--muted); text-align: center; }
+    .chart-legend { display: flex; gap: 16px; margin-top: 10px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+    .legend-dot  { width: 10px; height: 10px; border-radius: 2px; }
+
+    /* ── Misc ── */
+    .text-muted { color: var(--muted); }
+    .text-danger { color: var(--danger); }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .info-box { padding: 10px 14px; border-radius: 6px; font-size: 12.5px; line-height: 1.6; border-left: 3px solid; }
+    .info-box.success { background: #0c1f14; border-color: var(--success); color: #86efac; }
+    .info-box.error   { background: #1f0d0d; border-color: var(--danger);  color: #fca5a5; }
+    .info-box.info    { background: #0d1430; border-color: var(--accent);   color: #93c5fd; }
+    .color-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,0.2); }
+  </style>
+</head>
+<body>
+<div id="app">
+  <nav id="sidebar"></nav>
+  <main id="main"></main>
+</div>
+
+<div id="modal-backdrop">
+  <div id="modal-box">
+    <div id="modal-header">
+      <span id="modal-title">Modal</span>
+      <button class="modal-close" onclick="closeModal()">&#215;</button>
+    </div>
+    <div id="modal-body"></div>
+    <div id="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Batal</button>
+      <button class="btn btn-primary" id="modal-save-btn">Simpan</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// ── CONSTANTS ──────────────────────────────────────────────────────────────
+const KEYS = {
+  vehicles:        'vms_vehicles',
+  drivers:         'vms_drivers',
+  driverLicenses:  'vms_driver_licenses',
+  vehicleLicenses: 'vms_vehicle_licenses',
+  geofences:       'vms_geofences',
+  trips:           'vms_trips',
+  fuelLogs:        'vms_fuel_logs',
+  maintenance:     'vms_maintenance',
+  spareParts:      'vms_spare_parts',
+};
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+const uuid    = () => crypto.randomUUID();
+const esc     = s => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
+const fmt     = (n, d = 1) => Number(n || 0).toFixed(d);
+const fmtNum  = n => Number(n || 0).toLocaleString('id-ID');
+const fmtCur  = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  return Math.ceil((new Date(dateStr) - new Date()) / 86400000);
+}
+
+function expiryBadge(dateStr) {
+  const d = daysUntil(dateStr);
+  if (d === null) return '<span class="badge badge-muted">-</span>';
+  if (d < 0)    return `<span class="badge badge-danger">Expired ${Math.abs(d)}h lalu</span>`;
+  if (d <= 30)  return `<span class="badge badge-warning">${d} hari lagi</span>`;
+  return `<span class="badge badge-success">${fmtDate(dateStr)}</span>`;
+}
+
+// ── DATA LAYER ─────────────────────────────────────────────────────────────
+const db       = key  => JSON.parse(localStorage.getItem(key) || '[]');
+const dbSave   = (key, data) => localStorage.setItem(key, JSON.stringify(data));
+const dbGet    = (key, id)   => db(key).find(r => r.id === id);
+const dbAdd    = (key, rec)  => { const d = db(key); d.push({ id: uuid(), createdAt: new Date().toISOString(), ...rec }); dbSave(key, d); };
+const dbUpdate = (key, id, u) => dbSave(key, db(key).map(r => r.id === id ? { ...r, ...u, updatedAt: new Date().toISOString() } : r));
+const dbDelete = (key, id)   => dbSave(key, db(key).filter(r => r.id !== id));
+
+// ── TOAST ──────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── MODAL ──────────────────────────────────────────────────────────────────
+let _modalSave = null;
+
+function showModal(title, bodyHtml, onSave, saveLabel = 'Simpan') {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  document.getElementById('modal-save-btn').textContent = saveLabel;
+  _modalSave = onSave;
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
+  _modalSave = null;
+}
+
+// ── ICONS ──────────────────────────────────────────────────────────────────
+const IC = {
+  vehicle:  `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M5 17H3a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2l2-4h14l2 4a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="17.5" r="2.5"/></svg>`,
+  driver:   `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>`,
+  idcard:   `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="12" r="2"/><path d="M14 10h4M14 14h3"/></svg>`,
+  document: `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>`,
+  mappin:   `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>`,
+  grid:     `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
+  map:      `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polygon points="3,6 9,3 15,6 21,3 21,18 15,21 9,18 3,21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>`,
+  route:    `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 17l3-9 4 4 3-6 4 8 4-4"/></svg>`,
+  droplet:  `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`,
+  chart:    `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="4" width="4" height="17"/></svg>`,
+  wrench:   `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
+  package:  `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27,6.96 12,12.01 20.73,6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+  plus:     `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  download: `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  upload:   `<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17,8 12,3 7,8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+  edit:     `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
+  trash:    `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3,6 5,6 21,6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+  eye:      `<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+};
+
+// ── ROUTER ─────────────────────────────────────────────────────────────────
+const PAGES = {
+  dashboard:       pageDashboard,
+  vehicles:        pageVehicles,
+  drivers:         pageDrivers,
+  driverLicenses:  pageDriverLicenses,
+  vehicleLicenses: pageVehicleLicenses,
+  geofences:       pageGeofences,
+  tracking:        pageTracking,
+  tripLog:         pageTripLog,
+  fuelLog:         pageFuelLog,
+  fuelReport:      pageFuelReport,
+  maintenance:     pageMaintenance,
+  spareParts:      pageSpareparts,
+};
+
+let currentPage = 'dashboard';
+
+function navigate(id) {
+  currentPage = id;
+  document.querySelectorAll('.nav-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.page === id)
+  );
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  main.className = (id === 'tracking' || id === 'geofences') ? 'tracking-layout' : '';
+  if (PAGES[id]) PAGES[id](main);
+}
+
+// ── SIDEBAR ────────────────────────────────────────────────────────────────
+const NAV = [
+  { section: 'MASTER' },
+  { id: 'vehicles',        label: 'Vehicle',          icon: 'vehicle'  },
+  { id: 'drivers',         label: 'Driver',           icon: 'driver'   },
+  { id: 'driverLicenses',  label: 'Driver License',   icon: 'idcard'   },
+  { id: 'vehicleLicenses', label: 'Vehicle License',  icon: 'document' },
+  { id: 'geofences',       label: 'Geofence Library', icon: 'mappin'   },
+  { section: 'TRANSACTIONAL' },
+  { id: 'dashboard',       label: 'Dashboard',        icon: 'grid'     },
+  { id: 'tracking',        label: 'Tracking',         icon: 'map'      },
+  { id: 'tripLog',         label: 'Trip Log',         icon: 'route'    },
+  { id: 'fuelLog',         label: 'Fuel Log',         icon: 'droplet'  },
+  { id: 'fuelReport',      label: 'Fuel Report',      icon: 'chart'    },
+  { id: 'maintenance',     label: 'Maintenance',      icon: 'wrench'   },
+  { id: 'spareParts',     label: 'Spare Parts',      icon: 'package'  },
+];
+
+function exportData() {
+  const data = { _exportedAt: new Date().toISOString(), _version: '1' };
+  Object.entries(KEYS).forEach(([key, lsKey]) => { data[key] = db(lsKey); });
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href: url, download: `vms-backup-${new Date().toISOString().slice(0,10)}.json` });
+  a.click(); URL.revokeObjectURL(url);
+  toast('Data berhasil diekspor');
+}
+
+function importData() {
+  const input  = Object.assign(document.createElement('input'), { type: 'file', accept: '.json' });
+  input.onchange = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        let count = 0;
+        Object.entries(KEYS).forEach(([key, lsKey]) => {
+          if (Array.isArray(data[key])) { dbSave(lsKey, data[key]); count++; }
+        });
+        toast(`Import berhasil — ${count} tabel data dipulihkan`);
+        navigate(currentPage);
+      } catch { toast('File tidak valid atau rusak', 'error'); }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function buildSidebar() {
+  const nav = document.getElementById('sidebar');
+  nav.innerHTML = `<div class="brand"><div class="brand-name">VMS</div><div class="brand-sub">Vehicle Monitoring System</div></div>`;
+  NAV.forEach(item => {
+    if (item.section) {
+      const s = document.createElement('div');
+      s.className = 'nav-section';
+      s.textContent = item.section;
+      nav.appendChild(s);
+    } else {
+      const el = document.createElement('div');
+      el.className = 'nav-item';
+      el.dataset.page = item.id;
+      el.innerHTML = IC[item.icon] + `<span>${item.label}</span>`;
+      el.addEventListener('click', () => navigate(item.id));
+      nav.appendChild(el);
+    }
+  });
+
+  const footer = document.createElement('div');
+  footer.style.cssText = 'margin-top:auto;padding:10px 8px;border-top:1px solid var(--border)';
+  footer.innerHTML = `
+    <button onclick="exportData()" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:transparent;border:none;border-radius:6px;color:var(--muted);font-size:12px;cursor:pointer;text-align:left" onmouseover="this.style.background='var(--card)'" onmouseout="this.style.background='transparent'">
+      ${IC.download} Export Data
+    </button>
+    <button onclick="importData()" style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 10px;background:transparent;border:none;border-radius:6px;color:var(--muted);font-size:12px;cursor:pointer;text-align:left" onmouseover="this.style.background='var(--card)'" onmouseout="this.style.background='transparent'">
+      ${IC.upload} Import Data
+    </button>`;
+  nav.appendChild(footer);
+}
+
+// ── LEAFLET LOADER ─────────────────────────────────────────────────────────
+let _leafletReady = false;
+let _leafletQueue = [];
+
+function loadLeaflet() {
+  return new Promise((resolve, reject) => {
+    if (_leafletReady) { resolve(); return; }
+    _leafletQueue.push({ resolve, reject });
+    if (_leafletQueue.length > 1) return;
+    const sources = [
+      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+    ];
+    let i = 0;
+    function tryNext() {
+      if (i >= sources.length) {
+        _leafletQueue.forEach(cb => cb.reject(new Error('Leaflet CDN gagal')));
+        _leafletQueue = [];
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = sources[i++];
+      s.onload = () => {
+        if (typeof L !== 'undefined') {
+          _leafletReady = true;
+          _leafletQueue.forEach(cb => cb.resolve());
+          _leafletQueue = [];
+        } else tryNext();
+      };
+      s.onerror = tryNext;
+      document.head.appendChild(s);
+    }
+    tryNext();
+  });
+}
+
+// ── GEO HELPERS ────────────────────────────────────────────────────────────
+function haversine(a, b) {
+  const R = 6371, r = d => d * Math.PI / 180;
+  const dLat = r(b.lat - a.lat), dLon = r(b.lon - a.lon);
+  const x = Math.sin(dLat/2)**2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function getSpeedColor(s) {
+  if (s <= 0) return '#ef4444';
+  if (s < 10) return '#f97316';
+  if (s < 20) return '#f59e0b';
+  if (s < 35) return '#84cc16';
+  return '#22c55e';
+}
+
+function buildSpeedTrack(points) {
+  const hasSpeed = points.some(p => p.speed > 0);
+  if (!hasSpeed) return L.polyline(points.map(p => [p.lat, p.lon]), { color: '#4f7af8', weight: 4, opacity: 0.85 });
+  const layers = []; let segStart = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const cc = getSpeedColor(points[i].speed);
+    const nc = i + 1 < points.length - 1 ? getSpeedColor(points[i + 1].speed) : null;
+    if (nc !== cc) {
+      layers.push(L.polyline(points.slice(segStart, i + 2).map(p => [p.lat, p.lon]), { color: cc, weight: 5, opacity: 0.9 }));
+      segStart = i + 1;
+    }
+  }
+  if (segStart < points.length - 1)
+    layers.push(L.polyline(points.slice(segStart).map(p => [p.lat, p.lon]), { color: getSpeedColor(points[segStart].speed), weight: 5, opacity: 0.9 }));
+  return L.featureGroup(layers);
+}
+
+function computeStats(points) {
+  let dist = 0, maxSpd = 0, sumSpd = 0, spdCnt = 0, elevGain = 0, elevLoss = 0;
+  for (let i = 1; i < points.length; i++) {
+    dist += haversine(points[i-1], points[i]);
+    if (points[i].speed > 0) { maxSpd = Math.max(maxSpd, points[i].speed); sumSpd += points[i].speed; spdCnt++; }
+    const de = points[i].ele - points[i-1].ele;
+    if (de > 0) elevGain += de; else elevLoss -= de;
+  }
+  const first = points[0].time ? new Date(points[0].time) : null;
+  const last  = points[points.length-1].time ? new Date(points[points.length-1].time) : null;
+  let duration = '-';
+  if (first && last) { const ms = last - first; duration = `${String(Math.floor(ms/60000)).padStart(2,'0')}:${String(Math.floor((ms%60000)/1000)).padStart(2,'0')}`; }
+  return { distanceKm: dist, maxSpeed: maxSpd, avgSpeed: spdCnt ? sumSpd/spdCnt : 0, elevGain: Math.round(elevGain), elevLoss: Math.round(elevLoss), duration };
+}
+
+function parseGPX(xmlText) {
+  const xml = new DOMParser().parseFromString(xmlText, 'text/xml');
+  if (xml.querySelector('parsererror')) throw new Error('GPX tidak valid');
+  const trkpts = xml.querySelectorAll('trkpt');
+  if (!trkpts.length) throw new Error('Tidak ada trackpoint di file GPX');
+  const points = [];
+  trkpts.forEach(pt => {
+    const lat = parseFloat(pt.getAttribute('lat')), lon = parseFloat(pt.getAttribute('lon'));
+    if (!isNaN(lat) && !isNaN(lon)) points.push({
+      lat, lon,
+      ele: parseFloat(pt.querySelector('ele')?.textContent || '0'),
+      time: pt.querySelector('time')?.textContent || null,
+      speed: parseFloat(pt.querySelector('speed')?.textContent || '0') * 3.6,
+    });
+  });
+  const name = xml.querySelector('trk > name')?.textContent || 'Track';
+  return { points, name, format: 'GPX' };
+}
+
+function parseKML(xmlText) {
+  const xml = new DOMParser().parseFromString(xmlText, 'text/xml');
+  if (xml.querySelector('parsererror')) throw new Error('KML tidak valid');
+  const coordsEl = xml.querySelector('LineString > coordinates') || xml.querySelector('coordinates');
+  if (!coordsEl) throw new Error('Tidak ada koordinat LineString di file KML');
+  const points = coordsEl.textContent.trim().split(/\s+/).map(t => {
+    const [lon, lat, ele] = t.split(',').map(parseFloat);
+    return { lat, lon, ele: ele || 0, time: null, speed: 0 };
+  }).filter(p => !isNaN(p.lat) && !isNaN(p.lon));
+  if (!points.length) throw new Error('Tidak ada koordinat valid');
+  const name = xml.querySelector('Placemark > name')?.textContent || 'Track';
+  return { points, name, format: 'KML' };
+}
+
+function pointInPolygon(point, polygon) {
+  const x = point.lon, y = point.lat; let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i][1], yi = polygon[i][0], xj = polygon[j][1], yj = polygon[j][0];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + 1e-10) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+// ── PAGE STUBS ─────────────────────────────────────────────────────────────
+// Each stub is replaced in subsequent steps.
+
+function _stub(title) {
+  return `<div class="page"><div class="page-header"><div class="page-title">${title}</div></div><p class="text-muted">Memuat halaman...</p></div>`;
+}
+
+function pageDashboard(el) {
+  const vehicles  = db(KEYS.vehicles);
+  const drivers   = db(KEYS.drivers);
+  const trips     = db(KEYS.trips);
+  const slicenses = db(KEYS.driverLicenses);
+  const vlicenses = db(KEYS.vehicleLicenses);
+
+  const now   = new Date();
+  const days  = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+  const mons  = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+  const h     = now.getHours();
+  const greeting = h < 11 ? 'Selamat Pagi' : h < 15 ? 'Selamat Siang' : h < 18 ? 'Selamat Sore' : 'Selamat Malam';
+  const dateStr  = `${days[now.getDay()]}, ${now.getDate()} ${mons[now.getMonth()]} ${now.getFullYear()}`;
+
+  const allDocs = [
+    ...slicenses.map(l => {
+      const drv = drivers.find(d => d.id === l.driverId);
+      return { label: `SIM ${l.simType}`, sub: drv ? drv.name : '-', expiry: l.expiryDate, type: 'SIM' };
+    }),
+    ...vlicenses.map(l => {
+      const veh = vehicles.find(v => v.id === l.vehicleId);
+      return { label: 'STNK', sub: veh ? veh.plate : '-', expiry: l.expiryDate, type: 'STNK' };
+    }),
+  ].filter(d => { const x = daysUntil(d.expiry); return x !== null && x <= 60; })
+   .sort((a, b) => daysUntil(a.expiry) - daysUntil(b.expiry));
+
+  const critCount = allDocs.filter(d => daysUntil(d.expiry) <= 30).length;
+  const recentTrips = [...trips].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt)).slice(0, 5);
+
+  // KPI accent colors
+  const kpiCards = [
+    { label: 'Kendaraan Aktif', value: vehicles.filter(v => v.status === 'active').length,
+      sub: `dari ${vehicles.length} terdaftar`, color: 'var(--accent)', icon: IC.vehicle },
+    { label: 'Driver Aktif', value: drivers.filter(d => d.status === 'active').length,
+      sub: `dari ${drivers.length} terdaftar`, color: '#22c55e', icon: IC.driver },
+    { label: 'Dok. Perlu Perhatian', value: critCount,
+      sub: 'expired dalam 30 hari', color: critCount > 0 ? 'var(--warning)' : 'var(--muted)', icon: IC.document },
+    { label: 'Total Trip', value: trips.length,
+      sub: 'perjalanan tersimpan', color: '#a78bfa', icon: IC.route },
+  ];
+
+  const kpiHtml = kpiCards.map(k => `
+    <div class="kpi-card" style="border-left:3px solid ${k.color};position:relative;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div class="kpi-label">${k.label}</div>
+        <div style="color:${k.color};opacity:0.5;transform:scale(1.2)">${k.icon}</div>
+      </div>
+      <div class="kpi-value" style="color:${k.color === 'var(--muted)' ? 'var(--text)' : k.color}">${k.value}</div>
+      <div class="kpi-sub" style="margin-top:6px">${k.sub}</div>
+    </div>`).join('');
+
+  const alertsHtml = allDocs.length === 0
+    ? `<div style="padding:20px 0;text-align:center;color:var(--muted);font-size:13px">Semua dokumen masih berlaku</div>`
+    : allDocs.map(d => {
+        const days = daysUntil(d.expiry);
+        const accent = days < 0 ? 'var(--danger)' : days <= 14 ? 'var(--danger)' : days <= 30 ? 'var(--warning)' : '#4f7af850';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-left:3px solid ${accent};border-radius:6px;margin-bottom:6px">
+          <div>
+            <div style="font-size:13px;font-weight:500">${esc(d.label)} <span style="color:var(--muted);font-weight:400">— ${esc(d.sub)}</span></div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Berlaku s.d. ${fmtDate(d.expiry)}</div>
+          </div>
+          ${expiryBadge(d.expiry)}
+        </div>`;
+      }).join('');
+
+  const tripsHtml = recentTrips.length === 0
+    ? `<div style="padding:20px 0;text-align:center;color:var(--muted);font-size:13px">Belum ada trip tersimpan</div>`
+    : recentTrips.map(t => {
+        const veh  = vehicles.find(v => v.id === t.vehicleId);
+        const dist = t.stats ? Number(t.stats.distanceKm).toFixed(1) : null;
+        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;margin-bottom:6px;cursor:pointer"
+                     onclick="window._pendingTripId='${t.id}'; navigate('tracking')">
+          <div style="color:var(--accent);flex-shrink:0">${IC.route}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.name)}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${esc(veh ? veh.plate : 'Kendaraan tidak diset')}${dist ? ' · ' + dist + ' km' : ''}</div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);flex-shrink:0">${fmtDate(t.date || t.savedAt)}</div>
+        </div>`;
+      }).join('');
+
+  el.innerHTML = `<div class="page">
+    <div style="margin-bottom:28px;padding-bottom:20px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-size:22px;font-weight:700;letter-spacing:-0.02em">${greeting}</div>
+          <div style="color:var(--muted);font-size:13px;margin-top:4px">${dateStr}</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="navigate('tracking')">${IC.map} Tracking</button>
+          <button class="btn btn-primary btn-sm" onclick="navigate('fuelLog')">${IC.plus} Fuel Log</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:28px">${kpiHtml}</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="section-title" style="margin-bottom:0">Peringatan Dokumen</div>
+          ${critCount > 0 ? `<span class="badge badge-warning">${critCount} mendesak</span>` : ''}
+        </div>
+        <div>${alertsHtml}</div>
+        ${allDocs.length > 0 ? `<div style="margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="navigate('vehicleLicenses')" style="font-size:11px;color:var(--muted)">Kelola STNK →</button> <button class="btn btn-ghost btn-sm" onclick="navigate('driverLicenses')" style="font-size:11px;color:var(--muted)">Kelola SIM →</button></div>` : ''}
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="section-title" style="margin-bottom:0">Trip Terbaru</div>
+          <button class="btn btn-ghost btn-sm" onclick="navigate('tripLog')" style="font-size:11px;color:var(--muted)">Lihat semua →</button>
+        </div>
+        <div>${tripsHtml}</div>
+      </div>
+    </div>
+  </div>`;
+}
+function pageVehicles(el) {
+  function render() {
+    const rows = db(KEYS.vehicles);
+    const tbody = rows.length === 0
+      ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Belum ada kendaraan. Klik "+ Tambah" untuk menambahkan.</td></tr>`
+      : rows.map(v => `<tr>
+          <td><strong>${esc(v.plate)}</strong></td>
+          <td>${esc(v.brand)} ${esc(v.model)}</td>
+          <td>${esc(v.year || '-')}</td>
+          <td>${esc(v.cc ? v.cc + ' cc' : '-')}</td>
+          <td>${esc(v.color || '-')}</td>
+          <td>${v.theoreticalConsumption ? v.theoreticalConsumption + ' km/L' : '-'}</td>
+          <td><span class="badge ${v.status === 'active' ? 'badge-success' : 'badge-muted'}">${v.status === 'active' ? 'Aktif' : 'Non-aktif'}</span></td>
+          <td><div class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openVehicleForm('${v.id}')">${IC.edit}</button>
+            <button class="btn btn-ghost btn-sm text-danger" onclick="deleteVehicle('${v.id}')">${IC.trash}</button>
+          </div></td>
+        </tr>`).join('');
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Vehicle</div><div class="page-sub">Master data kendaraan</div></div>
+        <button class="btn btn-primary" onclick="openVehicleForm()">${IC.plus} Tambah</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Plat</th><th>Kendaraan</th><th>Tahun</th><th>CC</th><th>Warna</th><th>Konsumsi Teoritis</th><th>Status</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.openVehicleForm = function(id) {
+    const v = id ? dbGet(KEYS.vehicles, id) : {};
+    const title = id ? 'Edit Vehicle' : 'Tambah Vehicle';
+    showModal(title, `<div class="form-grid">
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Nama / Label</label><input id="vf-name" value="${esc(v.name||'')}" placeholder="cth: Motor Harian"></div>
+        <div class="form-group"><label>Nomor Plat</label><input id="vf-plate" value="${esc(v.plate||'')}" placeholder="B 1234 ABC"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Brand</label><input id="vf-brand" value="${esc(v.brand||'')}" placeholder="Honda"></div>
+        <div class="form-group"><label>Model</label><input id="vf-model" value="${esc(v.model||'')}" placeholder="PCX 160"></div>
+      </div>
+      <div class="form-grid form-grid-3">
+        <div class="form-group"><label>Tahun</label><input id="vf-year" type="number" value="${v.year||''}" placeholder="2022"></div>
+        <div class="form-group"><label>CC</label><input id="vf-cc" type="number" value="${v.cc||''}" placeholder="160"></div>
+        <div class="form-group"><label>Warna</label><input id="vf-color" value="${esc(v.color||'')}" placeholder="Putih"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Jenis BBM</label>
+          <select id="vf-fuel">
+            ${['Pertalite','Pertamax','Pertamax Turbo','Solar'].map(f=>`<option${v.fuelType===f?' selected':''}>${f}</option>`).join('')}
+          </select></div>
+        <div class="form-group"><label>Kapasitas Tangki (L)</label><input id="vf-cap" type="number" step="0.1" value="${v.fuelCapacity||''}" placeholder="8.1"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Konsumsi Teoritis (km/L)</label><input id="vf-cons" type="number" step="0.1" value="${v.theoreticalConsumption||''}" placeholder="45.2"></div>
+        <div class="form-group"><label>Odometer Awal (km)</label><input id="vf-odo" type="number" value="${v.odometer||''}" placeholder="0"></div>
+      </div>
+      <div class="form-group"><label>Status</label>
+        <select id="vf-status"><option value="active"${v.status!=='inactive'?' selected':''}>Aktif</option><option value="inactive"${v.status==='inactive'?' selected':''}>Non-aktif</option></select>
+      </div>
+      <div class="form-group"><label>Catatan</label><textarea id="vf-notes">${esc(v.notes||'')}</textarea></div>
+    </div>`, () => {
+      const plate = document.getElementById('vf-plate').value.trim().toUpperCase();
+      if (!plate) { toast('Nomor plat wajib diisi', 'error'); return; }
+      const rec = {
+        name: document.getElementById('vf-name').value.trim(),
+        plate,
+        brand: document.getElementById('vf-brand').value.trim(),
+        model: document.getElementById('vf-model').value.trim(),
+        year: parseInt(document.getElementById('vf-year').value) || null,
+        cc: parseInt(document.getElementById('vf-cc').value) || null,
+        color: document.getElementById('vf-color').value.trim(),
+        fuelType: document.getElementById('vf-fuel').value,
+        fuelCapacity: parseFloat(document.getElementById('vf-cap').value) || null,
+        theoreticalConsumption: parseFloat(document.getElementById('vf-cons').value) || null,
+        odometer: parseInt(document.getElementById('vf-odo').value) || 0,
+        status: document.getElementById('vf-status').value,
+        notes: document.getElementById('vf-notes').value.trim(),
+      };
+      if (id) dbUpdate(KEYS.vehicles, id, rec); else dbAdd(KEYS.vehicles, rec);
+      closeModal(); toast(id ? 'Vehicle diperbarui' : 'Vehicle ditambahkan'); render();
+    });
+  };
+
+  window.deleteVehicle = function(id) {
+    const v = dbGet(KEYS.vehicles, id);
+    if (!confirm(`Hapus kendaraan "${v ? v.plate : id}"?`)) return;
+    dbDelete(KEYS.vehicles, id); toast('Vehicle dihapus', 'error'); render();
+  };
+
+  render();
+}
+function pageDrivers(el) {
+  function render() {
+    const rows = db(KEYS.drivers);
+    const tbody = rows.length === 0
+      ? `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Belum ada driver. Klik "+ Tambah" untuk menambahkan.</td></tr>`
+      : rows.map(d => `<tr>
+          <td><strong>${esc(d.name)}</strong></td>
+          <td>${esc(d.phone || '-')}</td>
+          <td>${d.birthDate ? fmtDate(d.birthDate) : '-'}</td>
+          <td>${esc(d.address || '-')}</td>
+          <td><span class="badge ${d.status === 'active' ? 'badge-success' : 'badge-muted'}">${d.status === 'active' ? 'Aktif' : 'Non-aktif'}</span></td>
+          <td><div class="td-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openDriverForm('${d.id}')">${IC.edit}</button>
+            <button class="btn btn-ghost btn-sm text-danger" onclick="deleteDriver('${d.id}')">${IC.trash}</button>
+          </div></td>
+        </tr>`).join('');
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Driver</div><div class="page-sub">Master data pengemudi</div></div>
+        <button class="btn btn-primary" onclick="openDriverForm()">${IC.plus} Tambah</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Nama</th><th>Telepon</th><th>Tgl Lahir</th><th>Alamat</th><th>Status</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.openDriverForm = function(id) {
+    const d = id ? dbGet(KEYS.drivers, id) : {};
+    showModal(id ? 'Edit Driver' : 'Tambah Driver', `<div class="form-grid">
+      <div class="form-group"><label>Nama Lengkap</label><input id="df-name" value="${esc(d.name||'')}" placeholder="Ahmad Fauzi"></div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>No. Telepon</label><input id="df-phone" value="${esc(d.phone||'')}" placeholder="08xx"></div>
+        <div class="form-group"><label>Tanggal Lahir</label><input id="df-birth" type="date" value="${d.birthDate||''}"></div>
+      </div>
+      <div class="form-group"><label>Alamat</label><textarea id="df-addr">${esc(d.address||'')}</textarea></div>
+      <div class="form-group"><label>Status</label>
+        <select id="df-status"><option value="active"${d.status!=='inactive'?' selected':''}>Aktif</option><option value="inactive"${d.status==='inactive'?' selected':''}>Non-aktif</option></select>
+      </div>
+      <div class="form-group"><label>Catatan</label><textarea id="df-notes">${esc(d.notes||'')}</textarea></div>
+    </div>`, () => {
+      const name = document.getElementById('df-name').value.trim();
+      if (!name) { toast('Nama wajib diisi', 'error'); return; }
+      const rec = {
+        name,
+        phone: document.getElementById('df-phone').value.trim(),
+        birthDate: document.getElementById('df-birth').value || null,
+        address: document.getElementById('df-addr').value.trim(),
+        status: document.getElementById('df-status').value,
+        notes: document.getElementById('df-notes').value.trim(),
+      };
+      if (id) dbUpdate(KEYS.drivers, id, rec); else dbAdd(KEYS.drivers, rec);
+      closeModal(); toast(id ? 'Driver diperbarui' : 'Driver ditambahkan'); render();
+    });
+  };
+
+  window.deleteDriver = function(id) {
+    const d = dbGet(KEYS.drivers, id);
+    if (!confirm(`Hapus driver "${d ? d.name : id}"?`)) return;
+    dbDelete(KEYS.drivers, id); toast('Driver dihapus', 'error'); render();
+  };
+
+  render();
+}
+function pageDriverLicenses(el) {
+  function render() {
+    const rows = db(KEYS.driverLicenses);
+    const drivers = db(KEYS.drivers);
+    const tbody = rows.length === 0
+      ? `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px">Belum ada data SIM.</td></tr>`
+      : rows.map(l => {
+          const drv = drivers.find(d => d.id === l.driverId);
+          return `<tr>
+            <td>${esc(drv ? drv.name : '-')}</td>
+            <td><span class="badge badge-accent">${esc(l.simType)}</span></td>
+            <td>${esc(l.simNumber || '-')}</td>
+            <td>${fmtDate(l.issueDate)}</td>
+            <td>${expiryBadge(l.expiryDate)}</td>
+            <td><div class="td-actions">
+              <button class="btn btn-ghost btn-sm" onclick="openSimForm('${l.id}')">${IC.edit}</button>
+              <button class="btn btn-ghost btn-sm text-danger" onclick="deleteSim('${l.id}')">${IC.trash}</button>
+            </div></td>
+          </tr>`;
+        }).join('');
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Driver License (SIM)</div><div class="page-sub">Data SIM pengemudi beserta masa berlaku</div></div>
+        <button class="btn btn-primary" onclick="openSimForm()">${IC.plus} Tambah</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Driver</th><th>Tipe SIM</th><th>Nomor SIM</th><th>Tgl Terbit</th><th>Masa Berlaku</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.openSimForm = function(id) {
+    const l = id ? dbGet(KEYS.driverLicenses, id) : {};
+    const drivers = db(KEYS.drivers);
+    const drvOptions = drivers.map(d => `<option value="${d.id}"${l.driverId===d.id?' selected':''}>${esc(d.name)}</option>`).join('');
+    const simTypes = ['SIM A','SIM B1','SIM B2','SIM C','SIM C1','SIM C2','SIM D'];
+    const typeOpts = simTypes.map(t => `<option${l.simType===t?' selected':''}>${t}</option>`).join('');
+    showModal(id ? 'Edit SIM' : 'Tambah SIM', `<div class="form-grid">
+      <div class="form-group"><label>Driver</label><select id="sf-driver"><option value="">-- Pilih Driver --</option>${drvOptions}</select></div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Tipe SIM</label><select id="sf-type">${typeOpts}</select></div>
+        <div class="form-group"><label>Nomor SIM</label><input id="sf-num" value="${esc(l.simNumber||'')}" placeholder="1234567890123456"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Tanggal Terbit</label><input id="sf-issue" type="date" value="${l.issueDate||''}"></div>
+        <div class="form-group"><label>Tanggal Expired</label><input id="sf-expiry" type="date" value="${l.expiryDate||''}"></div>
+      </div>
+    </div>`, () => {
+      const driverId = document.getElementById('sf-driver').value;
+      if (!driverId) { toast('Pilih driver terlebih dahulu', 'error'); return; }
+      const rec = {
+        driverId,
+        simType: document.getElementById('sf-type').value,
+        simNumber: document.getElementById('sf-num').value.trim(),
+        issueDate: document.getElementById('sf-issue').value || null,
+        expiryDate: document.getElementById('sf-expiry').value || null,
+      };
+      if (id) dbUpdate(KEYS.driverLicenses, id, rec); else dbAdd(KEYS.driverLicenses, rec);
+      closeModal(); toast(id ? 'SIM diperbarui' : 'SIM ditambahkan'); render();
+    });
+  };
+
+  window.deleteSim = function(id) {
+    if (!confirm('Hapus data SIM ini?')) return;
+    dbDelete(KEYS.driverLicenses, id); toast('SIM dihapus', 'error'); render();
+  };
+
+  render();
+}
+function pageVehicleLicenses(el) {
+  function render() {
+    const rows = db(KEYS.vehicleLicenses);
+    const vehicles = db(KEYS.vehicles);
+    const tbody = rows.length === 0
+      ? `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Belum ada data STNK.</td></tr>`
+      : rows.map(l => {
+          const veh = vehicles.find(v => v.id === l.vehicleId);
+          return `<tr>
+            <td><strong>${esc(veh ? veh.plate : '-')}</strong><br><span class="text-muted" style="font-size:12px">${esc(veh ? veh.brand + ' ' + veh.model : '')}</span></td>
+            <td>${esc(l.stnkNumber || '-')}</td>
+            <td>${esc(l.ownerName || '-')}</td>
+            <td>${fmtDate(l.issueDate)}</td>
+            <td>${expiryBadge(l.expiryDate)}</td>
+            <td>${l.taxAmount ? fmtCur(l.taxAmount) : '-'}</td>
+            <td><div class="td-actions">
+              <button class="btn btn-ghost btn-sm" onclick="openStnkForm('${l.id}')">${IC.edit}</button>
+              <button class="btn btn-ghost btn-sm text-danger" onclick="deleteStnk('${l.id}')">${IC.trash}</button>
+            </div></td>
+          </tr>`;
+        }).join('');
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Vehicle License (STNK)</div><div class="page-sub">Data STNK kendaraan beserta masa berlaku</div></div>
+        <button class="btn btn-primary" onclick="openStnkForm()">${IC.plus} Tambah</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Kendaraan</th><th>No. STNK</th><th>Nama di STNK</th><th>Tgl Terbit</th><th>Masa Berlaku</th><th>Pajak</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.openStnkForm = function(id) {
+    const l = id ? dbGet(KEYS.vehicleLicenses, id) : {};
+    const vehicles = db(KEYS.vehicles);
+    const vehOpts = vehicles.map(v => `<option value="${v.id}"${l.vehicleId===v.id?' selected':''}>${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('');
+    showModal(id ? 'Edit STNK' : 'Tambah STNK', `<div class="form-grid">
+      <div class="form-group"><label>Kendaraan</label><select id="stf-veh"><option value="">-- Pilih Kendaraan --</option>${vehOpts}</select></div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>No. STNK</label><input id="stf-num" value="${esc(l.stnkNumber||'')}" placeholder="12345678"></div>
+        <div class="form-group"><label>Nama di STNK</label><input id="stf-owner" value="${esc(l.ownerName||'')}" placeholder="Nama pemilik"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Tanggal Terbit</label><input id="stf-issue" type="date" value="${l.issueDate||''}"></div>
+        <div class="form-group"><label>Tanggal Expired</label><input id="stf-expiry" type="date" value="${l.expiryDate||''}"></div>
+      </div>
+      <div class="form-group"><label>Nominal Pajak (Rp)</label><input id="stf-tax" type="number" value="${l.taxAmount||''}" placeholder="500000"></div>
+    </div>`, () => {
+      const vehicleId = document.getElementById('stf-veh').value;
+      if (!vehicleId) { toast('Pilih kendaraan terlebih dahulu', 'error'); return; }
+      const rec = {
+        vehicleId,
+        stnkNumber: document.getElementById('stf-num').value.trim(),
+        ownerName: document.getElementById('stf-owner').value.trim(),
+        issueDate: document.getElementById('stf-issue').value || null,
+        expiryDate: document.getElementById('stf-expiry').value || null,
+        taxAmount: parseInt(document.getElementById('stf-tax').value) || null,
+      };
+      if (id) dbUpdate(KEYS.vehicleLicenses, id, rec); else dbAdd(KEYS.vehicleLicenses, rec);
+      closeModal(); toast(id ? 'STNK diperbarui' : 'STNK ditambahkan'); render();
+    });
+  };
+
+  window.deleteStnk = function(id) {
+    if (!confirm('Hapus data STNK ini?')) return;
+    dbDelete(KEYS.vehicleLicenses, id); toast('STNK dihapus', 'error'); render();
+  };
+
+  render();
+}
+function pageGeofences(el) {
+  let gfMap = null, gfMarkers = [], gfDrawPoints = [], gfDrawLayer = null, gfDrawing = false;
+  const gfRuntimeLayers = {};
+
+  function renderPanel() {
+    const geofences = db(KEYS.geofences);
+    const listHtml = geofences.length === 0
+      ? `<div class="empty-state" style="padding:20px 0"><p>Belum ada geofence tersimpan</p></div>`
+      : geofences.map(g => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+          <span class="color-dot" style="background:${esc(g.color)};flex-shrink:0"></span>
+          <span style="flex:1;font-size:13px">${esc(g.name)}</span>
+          <span class="text-muted" style="font-size:11px">${g.latlngs.length} titik</span>
+          <button class="btn btn-ghost btn-sm" onclick="gfZoom('${g.id}')" title="Zoom">${IC.eye}</button>
+          <button class="btn btn-ghost btn-sm text-danger" onclick="gfDelete('${g.id}')" title="Hapus">${IC.trash}</button>
+        </div>`).join('');
+
+    el.innerHTML = `
+      <div class="tracking-panel" style="width:360px">
+        <div style="padding:4px 0 12px">
+          <div style="font-size:16px;font-weight:600">Geofence Library</div>
+          <div class="text-muted" style="font-size:12px;margin-top:2px">Kelola area geofence</div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-section-title">Buat Geofence Baru</div>
+          <div class="form-grid" style="gap:8px">
+            <div class="form-group">
+              <label>Nama</label>
+              <input id="gf-name" placeholder="cth: Rumah, Kantor">
+            </div>
+            <div style="display:flex;gap:8px;align-items:flex-end">
+              <div class="form-group" style="flex:1">
+                <label>Warna</label>
+                <input type="color" id="gf-color" value="#10b981" style="height:36px;padding:3px 6px;cursor:pointer">
+              </div>
+              <button class="btn btn-primary" id="gf-draw-btn" onclick="gfStartDraw()" style="height:36px">Mulai Gambar</button>
+              <button class="btn btn-danger" id="gf-cancel-btn" onclick="gfCancelDraw()" style="height:36px;display:none">Batal</button>
+            </div>
+            <div id="gf-hint" class="info-box info" style="display:none;font-size:12px">
+              Klik peta untuk tambah titik &bull; Double-click untuk selesai (min. 3 titik)
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-section" style="flex:1;overflow-y:auto">
+          <div class="panel-section-title">Tersimpan (${geofences.length})</div>
+          ${listHtml}
+        </div>
+      </div>
+      <div id="gf-map" style="flex:1"></div>`;
+
+    if (!gfMap) {
+      loadLeaflet().then(() => {
+        gfMap = L.map('gf-map').setView([-6.2, 106.9], 11);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(gfMap);
+        db(KEYS.geofences).forEach(g => addGfLayer(g));
+        setupGfMapEvents();
+      }).catch(e => {
+        document.getElementById('gf-map').innerHTML = `<div style="padding:24px;color:var(--danger)">Gagal load peta: ${e.message}</div>`;
+      });
+    } else {
+      db(KEYS.geofences).forEach(g => { if (!gfRuntimeLayers[g.id]) addGfLayer(g); });
+    }
+  }
+
+  function addGfLayer(g) {
+    const layer = L.polygon(g.latlngs, { color: g.color, fillColor: g.color, fillOpacity: 0.18, weight: 2 })
+      .addTo(gfMap).bindPopup(`<b>${g.name}</b>`);
+    gfRuntimeLayers[g.id] = layer;
+  }
+
+  function setupGfMapEvents() {
+    gfMap.on('click', e => {
+      if (!gfDrawing) return;
+      gfDrawPoints.push([e.latlng.lat, e.latlng.lng]);
+      const m = L.circleMarker(e.latlng, { radius: 5, color: '#fff', fillColor: '#4f7af8', fillOpacity: 1, weight: 2 }).addTo(gfMap);
+      gfMarkers.push(m);
+      if (gfDrawLayer) gfMap.removeLayer(gfDrawLayer);
+      if (gfDrawPoints.length >= 2) {
+        const col = document.getElementById('gf-color').value;
+        gfDrawLayer = L.polyline(gfDrawPoints, { color: col, weight: 3, dashArray: '6,4' }).addTo(gfMap);
+      }
+    });
+    gfMap.on('dblclick', e => {
+      if (!gfDrawing) return;
+      e.originalEvent.preventDefault();
+      if (gfDrawPoints.length < 3) { toast('Minimal 3 titik untuk polygon', 'error'); return; }
+      gfFinalizePolygon();
+    });
+  }
+
+  window.gfStartDraw = function() {
+    const name = document.getElementById('gf-name').value.trim();
+    if (!name) { toast('Isi nama geofence dulu', 'error'); return; }
+    gfDrawing = true; gfDrawPoints = []; gfMarkers = [];
+    gfMap.getContainer().style.cursor = 'crosshair';
+    gfMap.doubleClickZoom.disable();
+    document.getElementById('gf-draw-btn').style.display = 'none';
+    document.getElementById('gf-cancel-btn').style.display = '';
+    document.getElementById('gf-hint').style.display = '';
+  };
+
+  window.gfCancelDraw = function() {
+    gfDrawing = false; gfDrawPoints = [];
+    gfMarkers.forEach(m => gfMap.removeLayer(m)); gfMarkers = [];
+    if (gfDrawLayer) { gfMap.removeLayer(gfDrawLayer); gfDrawLayer = null; }
+    gfMap.getContainer().style.cursor = '';
+    gfMap.doubleClickZoom.enable();
+    document.getElementById('gf-draw-btn').style.display = '';
+    document.getElementById('gf-cancel-btn').style.display = 'none';
+    document.getElementById('gf-hint').style.display = 'none';
+  };
+
+  function gfFinalizePolygon() {
+    const name  = document.getElementById('gf-name').value.trim();
+    const color = document.getElementById('gf-color').value;
+    const rec = { name, color, latlngs: gfDrawPoints.slice() };
+    dbAdd(KEYS.geofences, rec);
+    gfMarkers.forEach(m => gfMap.removeLayer(m));
+    if (gfDrawLayer) gfMap.removeLayer(gfDrawLayer);
+    gfDrawLayer = null; gfMarkers = [];
+    gfDrawing = false;
+    gfMap.getContainer().style.cursor = '';
+    gfMap.doubleClickZoom.enable();
+    toast('Geofence disimpan');
+    renderPanel();
+    const saved = db(KEYS.geofences);
+    const last = saved[saved.length - 1];
+    if (last) addGfLayer(last);
+  }
+
+  window.gfZoom = function(id) {
+    const layer = gfRuntimeLayers[id];
+    if (layer) gfMap.fitBounds(layer.getBounds(), { padding: [40, 40] });
+  };
+
+  window.gfDelete = function(id) {
+    const g = dbGet(KEYS.geofences, id);
+    if (!confirm(`Hapus geofence "${g ? g.name : id}"?`)) return;
+    if (gfRuntimeLayers[id]) { gfMap.removeLayer(gfRuntimeLayers[id]); delete gfRuntimeLayers[id]; }
+    dbDelete(KEYS.geofences, id); toast('Geofence dihapus', 'error'); renderPanel();
+  };
+
+  renderPanel();
+}
+function pageTracking(el) {
+  let tMap = null, tTrackLayer = null, tStartM = null, tEndM = null, tPlayM = null;
+  let tPoints = [], tCurrentTrack = null, tPlayInterval = null;
+
+  el.innerHTML = `
+    <div class="tracking-panel">
+      <div style="font-size:15px;font-weight:600;padding-bottom:10px;border-bottom:1px solid var(--border)">Tracking</div>
+
+      <div class="panel-section">
+        <div class="panel-section-title">Upload File</div>
+        <label class="upload-box" id="tr-upload-box">
+          <div class="upload-box-title">Klik atau drop file</div>
+          <div class="upload-box-sub">Mendukung .gpx dan .kml</div>
+          <input type="file" id="tr-file" accept=".gpx,.kml" style="display:none">
+        </label>
+        <div id="tr-info" style="display:none;margin-top:8px"></div>
+      </div>
+
+      <div class="panel-section" id="tr-stats-panel" style="display:none">
+        <div class="panel-section-title">Statistik Track</div>
+        <div class="stats-grid-2">
+          <div class="stat-item"><div class="stat-label">Jarak</div><div class="stat-value" id="tr-dist">-<span class="stat-unit">km</span></div></div>
+          <div class="stat-item"><div class="stat-label">Durasi</div><div class="stat-value" id="tr-dur">-</div></div>
+          <div class="stat-item"><div class="stat-label">Kec. Maks</div><div class="stat-value" id="tr-maxspd">-<span class="stat-unit">km/h</span></div></div>
+          <div class="stat-item"><div class="stat-label">Kec. Rata2</div><div class="stat-value" id="tr-avgspd">-<span class="stat-unit">km/h</span></div></div>
+          <div class="stat-item"><div class="stat-label">Elevasi +/-</div><div class="stat-value" id="tr-elev">-<span class="stat-unit">m</span></div></div>
+          <div class="stat-item"><div class="stat-label">Total Titik</div><div class="stat-value" id="tr-pts">-</div></div>
+        </div>
+      </div>
+
+      <div class="panel-section" id="tr-playback-panel" style="display:none">
+        <div class="panel-section-title">Playback</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button class="btn btn-primary btn-sm" style="flex:1" id="tr-play-btn">Play</button>
+          <button class="btn btn-secondary btn-sm" id="tr-reset-btn">Reset</button>
+        </div>
+        <input type="range" class="slider-input" id="tr-slider" min="0" max="100" value="0">
+        <div class="playback-info" style="margin-top:4px">
+          <span id="tr-idx">-</span>
+          <span id="tr-spd">-</span>
+        </div>
+        <div id="tr-time" class="text-muted" style="font-size:11px;margin-top:2px">-</div>
+        <div id="tr-legend" style="display:none;margin-top:10px">
+          <div class="text-muted" style="font-size:10px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Kecepatan</div>
+          <div class="speed-legend">
+            <span class="speed-swatch" style="background:#ef4444">Stop</span>
+            <span class="speed-swatch" style="background:#f97316">&lt;10</span>
+            <span class="speed-swatch" style="background:#f59e0b">&lt;20</span>
+            <span class="speed-swatch" style="background:#84cc16">&lt;35</span>
+            <span class="speed-swatch" style="background:#22c55e">35+</span>
+            <span class="text-muted" style="font-size:10px">km/h</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="tr-gf-section" class="panel-section" style="display:none">
+        <div class="panel-section-title">Geofence Events (<span id="tr-gf-count">0</span>)</div>
+        <div id="tr-gf-list" style="max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <div style="margin-top:auto;padding-top:12px">
+        <button class="btn btn-primary" style="width:100%;display:none" id="tr-save-btn">Simpan Trip</button>
+      </div>
+    </div>
+    <div id="tracking-map"></div>`;
+
+  loadLeaflet().then(() => {
+    tMap = L.map('tracking-map').setView([-6.2, 106.9], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(tMap);
+    db(KEYS.geofences).forEach(g => {
+      L.polygon(g.latlngs, { color: g.color, fillColor: g.color, fillOpacity: 0.15, weight: 2 })
+        .addTo(tMap).bindPopup(`<b>${g.name}</b>`);
+    });
+    if (window._pendingTripId) {
+      const trip = dbGet(KEYS.trips, window._pendingTripId);
+      window._pendingTripId = null;
+      if (trip) { renderTrack(trip); document.getElementById('tr-save-btn').style.display = 'none'; }
+    }
+  }).catch(e => {
+    document.getElementById('tracking-map').innerHTML = `<div style="padding:24px;color:var(--danger)">Gagal load peta: ${e.message}</div>`;
+  });
+
+  function showInfo(msg, type) {
+    const el2 = document.getElementById('tr-info');
+    el2.className = `info-box ${type}`;
+    el2.textContent = msg;
+    el2.style.display = '';
+  }
+
+  function renderTrack(parsed) {
+    const { points, name, format } = parsed;
+    tPoints = points; tCurrentTrack = { ...parsed, stats: computeStats(points) };
+    if (tTrackLayer) tMap.removeLayer(tTrackLayer);
+    if (tStartM) tMap.removeLayer(tStartM);
+    if (tEndM) tMap.removeLayer(tEndM);
+    tTrackLayer = buildSpeedTrack(points).addTo(tMap);
+    const ll = points.map(p => [p.lat, p.lon]);
+    tStartM = L.marker(ll[0]).addTo(tMap).bindPopup('<b>Titik Awal</b>');
+    tEndM   = L.marker(ll[ll.length-1]).addTo(tMap).bindPopup('<b>Titik Akhir</b>');
+    tMap.fitBounds(tTrackLayer.getBounds(), { padding: [40, 40] });
+    const s = tCurrentTrack.stats;
+    document.getElementById('tr-dist').innerHTML   = s.distanceKm.toFixed(2) + '<span class="stat-unit">km</span>';
+    document.getElementById('tr-dur').textContent  = s.duration;
+    document.getElementById('tr-maxspd').innerHTML = s.maxSpeed.toFixed(1) + '<span class="stat-unit">km/h</span>';
+    document.getElementById('tr-avgspd').innerHTML = s.avgSpeed.toFixed(1) + '<span class="stat-unit">km/h</span>';
+    document.getElementById('tr-elev').innerHTML   = s.elevGain + '/' + s.elevLoss + '<span class="stat-unit">m</span>';
+    document.getElementById('tr-pts').textContent  = points.length;
+    document.getElementById('tr-stats-panel').style.display  = '';
+    document.getElementById('tr-playback-panel').style.display = '';
+    document.getElementById('tr-legend').style.display = points.some(p => p.speed > 0) ? '' : 'none';
+    const slider = document.getElementById('tr-slider');
+    slider.max = points.length - 1; slider.value = 0;
+    updateMarker(0);
+    document.getElementById('tr-save-btn').style.display = '';
+    if (format === 'KML') showInfo('KML tidak memiliki data waktu & kecepatan per titik.', 'info');
+    else showInfo('Berhasil dimuat. ' + points.length + ' titik.', 'success');
+    renderGfEvents();
+  }
+
+  function updateMarker(idx) {
+    if (!tPoints.length) return;
+    const p = tPoints[idx];
+    if (tPlayM) tMap.removeLayer(tPlayM);
+    tPlayM = L.marker([p.lat, p.lon], {
+      icon: L.divIcon({ className: '', html: '<div style="font-size:20px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5))">&#x1F6F5;</div>', iconSize: [26,26], iconAnchor: [13,13] }),
+      zIndexOffset: 1000
+    }).addTo(tMap);
+    document.getElementById('tr-idx').textContent  = `${idx+1}/${tPoints.length}`;
+    document.getElementById('tr-spd').textContent  = p.speed > 0 ? p.speed.toFixed(1) + ' km/h' : '-';
+    document.getElementById('tr-time').textContent = p.time ? new Date(p.time).toLocaleString('id-ID') : '-';
+  }
+
+  function renderGfEvents() {
+    const geofences = db(KEYS.geofences);
+    const sec = document.getElementById('tr-gf-section');
+    if (!geofences.length || !tPoints.length) { sec.style.display = 'none'; return; }
+    const events = [];
+    geofences.forEach(g => {
+      let wasIn = false;
+      tPoints.forEach((p, i) => {
+        const isIn = pointInPolygon(p, g.latlngs);
+        if (isIn && !wasIn) { wasIn = true; events.push({ type: 'enter', name: g.name, color: g.color, idx: i, time: p.time }); }
+        else if (!isIn && wasIn) { wasIn = false; events.push({ type: 'exit', name: g.name, color: g.color, idx: i, time: p.time }); }
+      });
+    });
+    events.sort((a,b) => a.idx - b.idx);
+    document.getElementById('tr-gf-count').textContent = events.length;
+    document.getElementById('tr-gf-list').innerHTML = events.slice(0, 20).map(ev => `
+      <div style="font-size:11.5px;padding:4px 6px;background:var(--bg);border-radius:4px;border-left:2px solid ${ev.color};cursor:pointer"
+           onclick="document.getElementById('tr-slider').value=${ev.idx};updateTrMarker(${ev.idx})">
+        <span style="color:var(--text)">${ev.type === 'enter' ? 'Masuk' : 'Keluar'}</span>
+        <span class="text-muted"> — ${esc(ev.name)}</span>
+      </div>`).join('');
+    sec.style.display = '';
+  }
+
+  window.updateTrMarker = idx => updateMarker(parseInt(idx));
+
+  document.getElementById('tr-file').addEventListener('change', e => {
+    if (!e.target.files[0]) return;
+    const f = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const ext = f.name.split('.').pop().toLowerCase();
+        if (ext === 'gpx') renderTrack(parseGPX(ev.target.result));
+        else if (ext === 'kml') renderTrack(parseKML(ev.target.result));
+        else throw new Error('Format tidak didukung. Gunakan .gpx atau .kml');
+      } catch(err) { showInfo(err.message, 'error'); }
+    };
+    reader.readAsText(f);
+  });
+
+  const uploadBox = document.getElementById('tr-upload-box');
+  uploadBox.addEventListener('dragover', e => { e.preventDefault(); uploadBox.classList.add('dragover'); });
+  uploadBox.addEventListener('dragleave', () => uploadBox.classList.remove('dragover'));
+  uploadBox.addEventListener('drop', e => {
+    e.preventDefault(); uploadBox.classList.remove('dragover');
+    if (e.dataTransfer.files[0]) {
+      const f = e.dataTransfer.files[0];
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const ext = f.name.split('.').pop().toLowerCase();
+          if (ext === 'gpx') renderTrack(parseGPX(ev.target.result));
+          else if (ext === 'kml') renderTrack(parseKML(ev.target.result));
+          else throw new Error('Format tidak didukung');
+        } catch(err) { showInfo(err.message, 'error'); }
+      };
+      reader.readAsText(f);
+    }
+  });
+
+  document.getElementById('tr-slider').addEventListener('input', e => updateMarker(parseInt(e.target.value)));
+
+  document.getElementById('tr-play-btn').addEventListener('click', () => {
+    if (tPlayInterval) {
+      clearInterval(tPlayInterval); tPlayInterval = null;
+      document.getElementById('tr-play-btn').textContent = 'Play';
+    } else {
+      document.getElementById('tr-play-btn').textContent = 'Pause';
+      tPlayInterval = setInterval(() => {
+        const s = document.getElementById('tr-slider');
+        const idx = parseInt(s.value);
+        if (idx >= tPoints.length - 1) { clearInterval(tPlayInterval); tPlayInterval = null; document.getElementById('tr-play-btn').textContent = 'Play'; return; }
+        s.value = idx + 1; updateMarker(idx + 1);
+      }, 80);
+    }
+  });
+
+  document.getElementById('tr-reset-btn').addEventListener('click', () => {
+    if (tPlayInterval) { clearInterval(tPlayInterval); tPlayInterval = null; document.getElementById('tr-play-btn').textContent = 'Play'; }
+    document.getElementById('tr-slider').value = 0; updateMarker(0);
+  });
+
+  document.getElementById('tr-save-btn').addEventListener('click', () => {
+    if (!tCurrentTrack) return;
+    const vehicles = db(KEYS.vehicles);
+    const drivers  = db(KEYS.drivers);
+    const vehOpts  = vehicles.map(v => `<option value="${v.id}">${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('');
+    const drvOpts  = drivers.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+    const defDate  = tCurrentTrack.points[0]?.time ? tCurrentTrack.points[0].time.slice(0, 10) : new Date().toISOString().slice(0, 10);
+    showModal('Simpan Trip', `<div class="form-grid">
+      <div class="form-group"><label>Nama Trip</label><input id="tsf-name" value="${esc(tCurrentTrack.name)}"></div>
+      <div class="form-group"><label>Tanggal</label><input id="tsf-date" type="date" value="${defDate}"></div>
+      <div class="form-group"><label>Kendaraan</label><select id="tsf-veh"><option value="">-- Tidak dipilih --</option>${vehOpts}</select></div>
+      <div class="form-group"><label>Driver</label><select id="tsf-drv"><option value="">-- Tidak dipilih --</option>${drvOpts}</select></div>
+      <div class="form-group"><label>Catatan</label><textarea id="tsf-notes" placeholder="Opsional"></textarea></div>
+    </div>`, () => {
+      const name = document.getElementById('tsf-name').value.trim();
+      if (!name) { toast('Nama trip wajib diisi', 'error'); return; }
+      dbAdd(KEYS.trips, {
+        name,
+        date: document.getElementById('tsf-date').value,
+        vehicleId: document.getElementById('tsf-veh').value || null,
+        driverId: document.getElementById('tsf-drv').value || null,
+        notes: document.getElementById('tsf-notes').value.trim(),
+        format: tCurrentTrack.format,
+        stats: tCurrentTrack.stats,
+        points: tCurrentTrack.points,
+        savedAt: new Date().toISOString(),
+      });
+      closeModal(); toast('Trip disimpan');
+      document.getElementById('tr-save-btn').style.display = 'none';
+    });
+  });
+}
+function pageTripLog(el) {
+  function render(filterVehicleId) {
+    const trips    = db(KEYS.trips);
+    const vehicles = db(KEYS.vehicles);
+    const drivers  = db(KEYS.drivers);
+    const vehOpts  = vehicles.map(v => `<option value="${v.id}"${filterVehicleId===v.id?' selected':''}>${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('');
+    const filtered = filterVehicleId ? trips.filter(t => t.vehicleId === filterVehicleId) : trips;
+    const sorted   = [...filtered].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
+
+    const tbody = sorted.length === 0
+      ? `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Belum ada trip tersimpan.</td></tr>`
+      : sorted.map(t => {
+          const veh = vehicles.find(v => v.id === t.vehicleId);
+          const drv = drivers.find(d => d.id === t.driverId);
+          const dist = t.stats ? Number(t.stats.distanceKm).toFixed(1) : '-';
+          return `<tr>
+            <td>${fmtDate(t.date || t.savedAt)}</td>
+            <td><strong>${esc(t.name)}</strong></td>
+            <td>${esc(veh ? veh.plate : '-')}</td>
+            <td>${esc(drv ? drv.name : '-')}</td>
+            <td>${dist} km</td>
+            <td><span class="badge badge-muted">${esc(t.format || '-')}</span></td>
+            <td><div class="td-actions">
+              <button class="btn btn-ghost btn-sm" title="Lihat di peta" onclick="viewTrip('${t.id}')">${IC.eye}</button>
+              <button class="btn btn-ghost btn-sm text-danger" onclick="deleteTrip('${t.id}')">${IC.trash}</button>
+            </div></td>
+          </tr>`;
+        }).join('');
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Trip Log</div><div class="page-sub">Histori semua trip yang tersimpan</div></div>
+      </div>
+      <div class="filter-bar">
+        <select id="tl-filter-veh" onchange="renderTripFilter(this.value)">
+          <option value="">Semua Kendaraan</option>${vehOpts}
+        </select>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tanggal</th><th>Nama Trip</th><th>Kendaraan</th><th>Driver</th><th>Jarak</th><th>Format</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.renderTripFilter = id => render(id);
+
+  window.viewTrip = function(id) {
+    window._pendingTripId = id;
+    navigate('tracking');
+  };
+
+  window.deleteTrip = function(id) {
+    if (!confirm('Hapus trip ini?')) return;
+    dbDelete(KEYS.trips, id); toast('Trip dihapus', 'error'); render();
+  };
+
+  render();
+}
+function pageFuelLog(el) {
+  const fuelTs = l => new Date((l.date || '') + 'T' + (l.time || '00:00'));
+  const fuelDtLabel = l => fmtDate(l.date) + (l.time ? ' ' + l.time : '');
+
+  function render() {
+    const logs     = [...db(KEYS.fuelLogs)].sort((a, b) => fuelTs(b) - fuelTs(a));
+    const vehicles = db(KEYS.vehicles);
+
+    const tbody = logs.length === 0
+      ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Belum ada catatan pengisian BBM.</td></tr>`
+      : logs.map(l => {
+          const veh   = vehicles.find(v => v.id === l.vehicleId);
+          const total = l.liters && l.pricePerLiter ? (l.liters * l.pricePerLiter) : null;
+          return `<tr>
+            <td>
+              <div>${fmtDate(l.date)}</div>
+              ${l.time ? `<div style="font-size:11px;color:var(--muted)">${l.time}</div>` : ''}
+            </td>
+            <td>${esc(veh ? veh.plate : '-')}</td>
+            <td>${l.liters ? Number(l.liters).toFixed(2) + ' L' : '-'}</td>
+            <td>${l.pricePerLiter ? fmtCur(l.pricePerLiter) + '/L' : '-'}</td>
+            <td>${total ? fmtCur(total) : '-'}</td>
+            <td>${l.odometer != null ? fmtNum(l.odometer) + ' km' : '-'}</td>
+            <td>${esc(l.station || '-')}</td>
+            <td><div class="td-actions">
+              <button class="btn btn-ghost btn-sm" onclick="openFuelForm('${l.id}')">${IC.edit}</button>
+              <button class="btn btn-ghost btn-sm text-danger" onclick="deleteFuel('${l.id}')">${IC.trash}</button>
+            </div></td>
+          </tr>`;
+        }).join('');
+
+    const totalSpend = logs.reduce((s, l) => s + (l.liters && l.pricePerLiter ? l.liters * l.pricePerLiter : 0), 0);
+    const totalLit   = logs.reduce((s, l) => s + (l.liters || 0), 0);
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Fuel Log</div><div class="page-sub">Catatan pengisian BBM kendaraan</div></div>
+        <button class="btn btn-primary" onclick="openFuelForm()">${IC.plus} Tambah</button>
+      </div>
+      <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="kpi-card"><div class="kpi-label">Total Pengisian</div><div class="kpi-value">${logs.length}x</div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Liter</div><div class="kpi-value">${totalLit.toFixed(1)}<span style="font-size:14px;font-weight:400;color:var(--muted)"> L</span></div></div>
+        <div class="kpi-card"><div class="kpi-label">Total Biaya</div><div class="kpi-value" style="font-size:18px">${fmtCur(totalSpend)}</div></div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tanggal &amp; Jam</th><th>Kendaraan</th><th>Liter</th><th>Harga/L</th><th>Total</th><th>Odometer</th><th>SPBU</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.openFuelForm = function(id) {
+    const l = id ? dbGet(KEYS.fuelLogs, id) : {};
+    const vehicles = db(KEYS.vehicles);
+    const vehOpts  = vehicles.map(v => `<option value="${v.id}"${l.vehicleId===v.id?' selected':''}>${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('');
+    const nowTime  = new Date().toTimeString().slice(0, 5);
+    showModal(id ? 'Edit Fuel Log' : 'Tambah Pengisian BBM', `<div class="form-grid">
+      <div class="form-group"><label>Kendaraan</label><select id="ff-veh"><option value="">-- Pilih Kendaraan --</option>${vehOpts}</select></div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Tanggal</label><input id="ff-date" type="date" value="${l.date || new Date().toISOString().slice(0,10)}"></div>
+        <div class="form-group"><label>Jam Pengisian</label><input id="ff-time" type="time" value="${l.time || nowTime}"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Jumlah (Liter)</label><input id="ff-lit" type="number" step="0.01" value="${l.liters||''}" placeholder="10.5"></div>
+        <div class="form-group"><label>Harga per Liter (Rp)</label><input id="ff-price" type="number" value="${l.pricePerLiter||''}" placeholder="10000"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Odometer (km)</label><input id="ff-odo" type="number" value="${l.odometer != null ? l.odometer : ''}" placeholder="12500"></div>
+        <div class="form-group"><label>SPBU / Stasiun</label><input id="ff-station" value="${esc(l.station||'')}" placeholder="Pertamina Sudirman"></div>
+      </div>
+      <div class="form-group"><label>Catatan</label><textarea id="ff-notes">${esc(l.notes||'')}</textarea></div>
+    </div>`, () => {
+      const vehicleId = document.getElementById('ff-veh').value;
+      if (!vehicleId) { toast('Pilih kendaraan terlebih dahulu', 'error'); return; }
+      const odoVal = document.getElementById('ff-odo').value;
+      const rec = {
+        vehicleId,
+        date:         document.getElementById('ff-date').value,
+        time:         document.getElementById('ff-time').value || null,
+        liters:       parseFloat(document.getElementById('ff-lit').value) || null,
+        pricePerLiter:parseInt(document.getElementById('ff-price').value) || null,
+        odometer:     odoVal !== '' ? parseInt(odoVal) : null,
+        station:      document.getElementById('ff-station').value.trim(),
+        notes:        document.getElementById('ff-notes').value.trim(),
+      };
+      if (id) dbUpdate(KEYS.fuelLogs, id, rec); else dbAdd(KEYS.fuelLogs, rec);
+      closeModal(); toast(id ? 'Fuel log diperbarui' : 'Pengisian dicatat'); render();
+    });
+  };
+
+  window.deleteFuel = function(id) {
+    if (!confirm('Hapus catatan ini?')) return;
+    dbDelete(KEYS.fuelLogs, id); toast('Fuel log dihapus', 'error'); render();
+  };
+
+  render();
+}
+function pageFuelReport(el) {
+  const fuelTs     = l => new Date((l.date || '') + 'T' + (l.time || '00:00'));
+  const fuelDtLbl  = l => fmtDate(l.date) + (l.time ? ' ' + l.time : '');
+
+  function render(vehicleId, periodIdx) {
+    const vehicles    = db(KEYS.vehicles);
+    const vehOpts     = vehicles.map(v => `<option value="${v.id}"${vehicleId===v.id?' selected':''}>${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('');
+    const veh         = vehicleId ? vehicles.find(v => v.id === vehicleId) : null;
+    const theoretical = veh?.theoreticalConsumption ? Number(veh.theoreticalConsumption) : null;
+
+    let chartHtml = '', summaryHtml = '', diagHtml = '', periodHtml = '';
+
+    if (vehicleId) {
+      const logs = db(KEYS.fuelLogs)
+        .filter(l => l.vehicleId === vehicleId && l.odometer != null && l.liters > 0)
+        .sort((a, b) => fuelTs(a) - fuelTs(b));
+
+      // Build all intervals with period labels
+      const allIntervals = [];
+      for (let i = 1; i < logs.length; i++) {
+        const km  = Number(logs[i].odometer) - Number(logs[i-1].odometer);
+        const lit = Number(logs[i].liters);
+        if (km > 0 && lit > 0) allIntervals.push({
+          periodLabel:   `${fuelDtLbl(logs[i-1])} → ${fuelDtLbl(logs[i])}`,
+          label:         fuelDtLbl(logs[i]),
+          actual:        km / lit,
+          km, lit,
+          pricePerLiter: logs[i].pricePerLiter ? Number(logs[i].pricePerLiter) : null,
+        });
+      }
+
+      // Open interval: last fill-up → last recorded trip after it
+      if (logs.length > 0) {
+        const lastLog    = logs[logs.length - 1];
+        const lastTs     = fuelTs(lastLog);
+        const lastDate   = lastLog.date || '';
+        const tripsAfter = db(KEYS.trips)
+          .filter(t => t.vehicleId === vehicleId && (t.date || '') >= lastDate);
+        const kmSince  = tripsAfter.reduce((s, t) => s + (t.stats?.distanceKm || 0), 0);
+        const lastTrip = [...tripsAfter].sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+        const endLabel = lastTrip ? fmtDate(lastTrip.date) : 'Sekarang';
+        allIntervals.push({
+          isOpen: true,
+          periodLabel: `${fuelDtLbl(lastLog)} → ${endLabel} ↻`,
+          label: endLabel,
+          actual: null, km: kmSince, lit: null,
+          litTheo: theoretical && kmSince > 0 ? kmSince / theoretical : null,
+          pricePerLiter: lastLog.pricePerLiter ? Number(lastLog.pricePerLiter) : null,
+        });
+      }
+
+      // Period filter dropdown
+      const closedIntervals = allIntervals.filter(x => !x.isOpen);
+      if (allIntervals.length >= 1) {
+        const pIdx = (periodIdx !== undefined && periodIdx !== null && periodIdx !== '') ? parseInt(periodIdx) : -1;
+        const periodOpts = allIntervals.map((iv, i) =>
+          `<option value="${i}"${pIdx === i ? ' selected' : ''}>${esc(iv.periodLabel)}</option>`
+        ).join('');
+        periodHtml = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:24px;flex-wrap:wrap">
+          <label style="color:var(--muted);font-size:12px;white-space:nowrap">Periode:</label>
+          <select onchange="renderFuelReport('${vehicleId}', this.value)" style="max-width:380px">
+            <option value=""${pIdx === -1 ? ' selected' : ''}>Semua Periode Tertutup (${closedIntervals.length} interval)</option>
+            ${periodOpts}
+          </select>
+        </div>`;
+      }
+
+      // Apply period filter — "Semua" only aggregates closed intervals
+      const pIdx2 = (periodIdx !== undefined && periodIdx !== null && periodIdx !== '') ? parseInt(periodIdx) : -1;
+      const selInterval = pIdx2 >= 0 ? allIntervals[pIdx2] : null;
+      const intervals   = selInterval ? [selInterval] : closedIntervals;
+
+      // Diagnostic info when data is missing
+      const allLogs = db(KEYS.fuelLogs).filter(l => l.vehicleId === vehicleId);
+      const noOdo   = allLogs.filter(l => l.odometer == null || l.odometer === '');
+      if (allLogs.length === 0) {
+        diagHtml = `<div class="info-box info">Belum ada Fuel Log untuk kendaraan ini. Tambahkan minimal 2 entri dengan <strong>odometer</strong> dan <strong>jam</strong> diisi.</div>`;
+      } else if (closedIntervals.length === 0) {
+        diagHtml = `<div class="info-box info">
+          Ditemukan <strong>${allLogs.length}</strong> entri fuel log, tapi butuh minimal <strong>2 entri dengan odometer terisi</strong> untuk hitung interval konsumsi.
+          ${noOdo.length > 0 ? `<br>${noOdo.length} entri tidak punya odometer — edit entri tersebut untuk melengkapi.` : ''}
+        </div>`;
+      }
+
+      // ---- OPEN INTERVAL selected ----
+      if (selInterval?.isOpen) {
+        const iv = selInterval;
+        const estLit  = iv.litTheo;
+        const estCost = estLit && iv.pricePerLiter ? estLit * iv.pricePerLiter : null;
+        summaryHtml = `
+          <div class="info-box info" style="margin-bottom:20px">
+            <strong>Periode Berlangsung</strong> — Pengisian berikutnya belum tercatat.
+            Data aktual km/L tidak dapat dihitung. Berikut estimasi berdasarkan konsumsi teoritis.
+          </div>
+          <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">
+            <div class="kpi-card" style="border-left:3px solid var(--accent)">
+              <div class="kpi-label">Km Tercatat</div>
+              <div class="kpi-value">${iv.km > 0 ? fmtNum(Math.round(iv.km)) : '0'}<span style="font-size:13px;color:var(--muted)"> km</span></div>
+              <div class="kpi-sub">dari Trip Log sejak pengisian</div>
+            </div>
+            <div class="kpi-card" style="border-left:3px solid #a78bfa">
+              <div class="kpi-label">Estimasi BBM Terpakai</div>
+              <div class="kpi-value">${estLit ? estLit.toFixed(2) + '<span style="font-size:13px;color:var(--muted)"> L</span>' : '-'}</div>
+              <div class="kpi-sub">${theoretical ? 'Berdasarkan teoritis ' + theoretical + ' km/L' : 'Isi teoritis di master Vehicle'}</div>
+            </div>
+            <div class="kpi-card" style="border-left:3px solid var(--warning)">
+              <div class="kpi-label">Estimasi Biaya BBM</div>
+              <div class="kpi-value" style="font-size:20px;padding-top:4px">${estCost ? fmtCur(Math.round(estCost)) : '-'}</div>
+              <div class="kpi-sub">${iv.pricePerLiter ? 'Harga: ' + fmtCur(iv.pricePerLiter) + '/L (pengisian terakhir)' : 'Isi harga/L di Fuel Log'}</div>
+            </div>
+          </div>`;
+        chartHtml = `<div class="card" style="text-align:center;padding:32px;color:var(--muted);font-size:13px">
+          Chart km/L tersedia setelah pengisian BBM berikutnya dicatat
+        </div>`;
+      }
+
+      // ---- CLOSED INTERVAL(S) ----
+      else if (intervals.length > 0) {
+        const avgActual     = intervals.reduce((s, x) => s + x.actual, 0) / intervals.length;
+        const totalKm       = intervals.reduce((s, x) => s + x.km, 0);
+        const totalLitActual = intervals.reduce((s, x) => s + x.lit, 0);
+
+        const totalLitTheo  = theoretical ? totalKm / theoretical : null;
+        const litDiff       = totalLitTheo !== null ? totalLitTheo - totalLitActual : null;
+
+        const pricedLogs    = intervals.filter(x => x.pricePerLiter > 0);
+        const avgPrice      = pricedLogs.length > 0
+          ? pricedLogs.reduce((s, x) => s + x.pricePerLiter, 0) / pricedLogs.length : null;
+        const costDiff      = litDiff !== null && avgPrice ? litDiff * avgPrice : null;
+
+        const diff          = theoretical ? avgActual - theoretical : null;
+        const diffBadge = diff !== null
+          ? `<span class="badge ${diff >= 0 ? 'badge-success' : 'badge-warning'}">${diff >= 0 ? '+' : ''}${diff.toFixed(1)} km/L</span>`
+          : '<span class="badge badge-muted">Isi teoritis di master Vehicle</span>';
+
+        const litBadge = litDiff !== null
+          ? `<span class="badge ${litDiff >= 0 ? 'badge-success' : 'badge-warning'}">${litDiff >= 0 ? 'Hemat' : 'Boros'} ${Math.abs(litDiff).toFixed(2)} L</span>`
+          : '<span class="badge badge-muted">-</span>';
+
+        const costBadge = costDiff !== null
+          ? `<span class="badge ${costDiff >= 0 ? 'badge-success' : 'badge-warning'}">${costDiff >= 0 ? 'Hemat' : 'Boros'} ${fmtCur(Math.abs(Math.round(costDiff)))}</span>`
+          : avgPrice ? '<span class="badge badge-muted">-</span>' : '<span class="badge badge-muted">Isi harga/L di Fuel Log</span>';
+
+        summaryHtml = `
+          <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
+            <div class="kpi-card">
+              <div class="kpi-label">Rata2 Aktual</div>
+              <div class="kpi-value">${avgActual.toFixed(2)}<span style="font-size:13px;color:var(--muted)"> km/L</span></div>
+              <div class="kpi-sub">${intervals.length} interval pengisian</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Teoritis (Spec)</div>
+              <div class="kpi-value">${theoretical ? theoretical.toFixed(1) + '<span style="font-size:13px;color:var(--muted)"> km/L</span>' : '-'}</div>
+              <div class="kpi-sub">dari master Vehicle</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Selisih Efisiensi</div>
+              <div class="kpi-value" style="font-size:18px;padding-top:4px">${diffBadge}</div>
+            </div>
+          </div>
+          <div class="kpi-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">
+            <div class="kpi-card">
+              <div class="kpi-label">Total Jarak</div>
+              <div class="kpi-value">${fmtNum(Math.round(totalKm))}<span style="font-size:13px;color:var(--muted)"> km</span></div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Hemat / Boros (Liter)</div>
+              <div class="kpi-value" style="font-size:18px;padding-top:4px">${litBadge}</div>
+              <div class="kpi-sub">${totalLitTheo ? 'Teoritis: ' + totalLitTheo.toFixed(2) + ' L · Aktual: ' + totalLitActual.toFixed(2) + ' L' : ''}</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Hemat / Boros (Rupiah)</div>
+              <div class="kpi-value" style="font-size:18px;padding-top:4px">${costBadge}</div>
+              <div class="kpi-sub">${avgPrice ? 'Avg harga: ' + fmtCur(Math.round(avgPrice)) + '/L' : 'Isi harga/L di Fuel Log'}</div>
+            </div>
+          </div>`;
+
+        // Chart
+        const maxVal = Math.max(...intervals.map(x => x.actual), theoretical || 0) * 1.25;
+        const H = 160, W_bar = 36, GAP = 14;
+        const totalW = Math.max(300, intervals.length * (W_bar + GAP) + GAP);
+        const barHtml = intervals.map((iv, i) => {
+          const bH    = Math.max(4, (iv.actual / maxVal) * H);
+          const x     = GAP + i * (W_bar + GAP);
+          const color = theoretical && iv.actual >= theoretical * 0.9 ? '#22c55e' : '#f59e0b';
+          return `<rect x="${x}" y="${H - bH}" width="${W_bar}" height="${bH}" fill="${color}" rx="3" opacity="0.85"/>
+            <text x="${x + W_bar/2}" y="${H - bH - 5}" text-anchor="middle" font-size="10" fill="#c0c4d0" font-weight="500">${iv.actual.toFixed(1)}</text>
+            <text x="${x + W_bar/2}" y="${H + 15}" text-anchor="middle" font-size="9" fill="#7b8099">${iv.label.slice(0,6)}</text>
+            <text x="${x + W_bar/2}" y="${H + 25}" text-anchor="middle" font-size="8" fill="#555870">${iv.km.toFixed(0)}km</text>`;
+        }).join('');
+
+        const theoLineY = theoretical ? H - (theoretical / maxVal) * H : null;
+        const theoLine  = theoLineY !== null
+          ? `<line x1="0" y1="${theoLineY}" x2="${totalW}" y2="${theoLineY}" stroke="#4f7af8" stroke-width="1.5" stroke-dasharray="6,4"/>
+             <text x="4" y="${theoLineY - 5}" font-size="9" fill="#4f7af8">${theoretical} km/L (spec)</text>`
+          : '';
+
+        // When viewing "Semua", append open period info card below chart
+        const openIv = allIntervals.find(x => x.isOpen);
+        const openCard = (!selInterval && openIv) ? `
+          <div class="card" style="margin-top:16px;border-left:3px solid var(--accent);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+            <div>
+              <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Periode Berlangsung (belum tutup)</div>
+              <div style="font-size:13px;font-weight:500">${esc(openIv.periodLabel)}</div>
+            </div>
+            <div style="display:flex;gap:20px;flex-wrap:wrap">
+              <div><div style="font-size:11px;color:var(--muted)">Km tercatat</div><div style="font-weight:600">${openIv.km > 0 ? fmtNum(Math.round(openIv.km)) + ' km' : '0 km'}</div></div>
+              <div><div style="font-size:11px;color:var(--muted)">Est. BBM</div><div style="font-weight:600">${openIv.litTheo ? openIv.litTheo.toFixed(2) + ' L' : '-'}</div></div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="renderFuelReport('${vehicleId}', '${allIntervals.length - 1}')">Lihat Detail</button>
+          </div>` : '';
+
+        chartHtml = `<div class="card" style="overflow-x:auto">
+          <div class="section-title" style="margin-bottom:16px">Konsumsi per Interval Pengisian (km/L)</div>
+          <svg width="${totalW}" height="${H + 34}" style="display:block;min-width:100%">
+            ${barHtml}${theoLine}
+          </svg>
+          <div class="chart-legend" style="margin-top:12px">
+            <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Efisien (≥ 90% teoritis)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>Di bawah teoritis</div>
+            ${theoretical ? `<div class="legend-item"><div style="width:16px;height:2px;background:#4f7af8;border-radius:1px"></div>Target teoritis</div>` : ''}
+          </div>
+        </div>${openCard}`;
+      }
+    } else {
+      chartHtml = `<div class="empty-state"><p>Pilih kendaraan untuk melihat laporan konsumsi BBM.</p></div>`;
+    }
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Fuel Report</div><div class="page-sub">Analisis konsumsi BBM aktual vs teoritis</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:${periodHtml ? '16px' : '24px'};flex-wrap:wrap">
+        <label style="color:var(--muted);font-size:12px;white-space:nowrap">Kendaraan:</label>
+        <select onchange="renderFuelReport(this.value, null)" style="max-width:280px">
+          <option value="">-- Pilih Kendaraan --</option>${vehOpts}
+        </select>
+      </div>
+      ${periodHtml}
+      ${diagHtml ? `<div style="margin-bottom:20px">${diagHtml}</div>` : ''}
+      ${summaryHtml}
+      ${chartHtml}
+    </div>`;
+  }
+
+  window.renderFuelReport = (id, pidx) => render(id, pidx);
+  render();
+}
+function pageMaintenance(el) {
+  const TYPES = [
+    'Ganti Oli', 'Ganti Filter Oli', 'Ganti Filter Udara', 'Ganti Busi',
+    'Tune Up', 'Servis Berkala', 'Ganti Rantai', 'Ganti Gear Set',
+    'Ganti Kampas Rem Depan', 'Ganti Kampas Rem Belakang',
+    'Ganti Ban Depan', 'Ganti Ban Belakang', 'Ganti Aki', 'Lainnya',
+  ];
+  const SVC = {
+    'Ganti Oli':                  { days: 90,   km: 3000  },
+    'Ganti Filter Oli':           { days: 180,  km: 6000  },
+    'Ganti Filter Udara':         { days: 180,  km: 10000 },
+    'Ganti Busi':                 { days: null, km: 8000  },
+    'Tune Up':                    { days: 180,  km: 8000  },
+    'Servis Berkala':             { days: 90,   km: 3000  },
+    'Ganti Rantai':               { days: null, km: 10000 },
+    'Ganti Gear Set':             { days: null, km: 20000 },
+    'Ganti Kampas Rem Depan':     { days: null, km: 15000 },
+    'Ganti Kampas Rem Belakang':  { days: null, km: 10000 },
+    'Ganti Ban Depan':            { days: 730,  km: 20000 },
+    'Ganti Ban Belakang':         { days: 730,  km: 15000 },
+    'Ganti Aki':                  { days: 730,  km: null  },
+  };
+
+  window.maintAutoSuggest = function() {
+    const checked = [...document.querySelectorAll('.maint-type-cb:checked')].map(cb => cb.value);
+    const date    = document.getElementById('mf-date').value;
+    const odo     = parseInt(document.getElementById('mf-odo').value) || null;
+    let minDays = Infinity, minKm = Infinity;
+    checked.forEach(t => {
+      if (SVC[t]?.days) minDays = Math.min(minDays, SVC[t].days);
+      if (SVC[t]?.km)   minKm   = Math.min(minKm,   SVC[t].km);
+    });
+    if (date && minDays < Infinity) {
+      const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + minDays);
+      document.getElementById('mf-ndate').value = d.toISOString().slice(0, 10);
+    }
+    if (odo && minKm < Infinity) {
+      document.getElementById('mf-nodo').value = odo + minKm;
+    }
+  };
+
+  function render() {
+    const logs     = [...db(KEYS.maintenance)].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const vehicles = db(KEYS.vehicles);
+
+    const tbody = logs.length === 0
+      ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">Belum ada catatan maintenance.</td></tr>`
+      : logs.map(m => {
+          const veh   = vehicles.find(v => v.id === m.vehicleId);
+          const types = Array.isArray(m.types) ? m.types : (m.type ? [m.type] : []);
+          let nextBadge = '-';
+          if (m.nextDueDate) nextBadge = expiryBadge(m.nextDueDate);
+          else if (m.nextDueOdometer) nextBadge = `<span class="badge badge-muted">${fmtNum(m.nextDueOdometer)} km</span>`;
+          return `<tr>
+            <td>${fmtDate(m.date)}</td>
+            <td>${esc(veh ? veh.plate : '-')}</td>
+            <td><div style="display:flex;flex-wrap:wrap;gap:3px">${types.map(t => `<span class="badge badge-accent">${esc(t)}</span>`).join('')}</div></td>
+            <td>${esc(m.description || '-')}</td>
+            <td>${m.odometer ? fmtNum(m.odometer) + ' km' : '-'}</td>
+            <td>${m.cost ? fmtCur(m.cost) : '-'}</td>
+            <td>${nextBadge}</td>
+            <td><div class="td-actions">
+              <button class="btn btn-ghost btn-sm" onclick="openMaintForm('${m.id}')">${IC.edit}</button>
+              <button class="btn btn-ghost btn-sm text-danger" onclick="deleteMaint('${m.id}')">${IC.trash}</button>
+            </div></td>
+          </tr>`;
+        }).join('');
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Maintenance Log</div><div class="page-sub">Riwayat servis dan perawatan kendaraan</div></div>
+        <button class="btn btn-primary" onclick="openMaintForm()">${IC.plus} Tambah</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Tanggal</th><th>Kendaraan</th><th>Jenis Servis</th><th>Keterangan</th><th>Odometer</th><th>Biaya</th><th>Next Due</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.openMaintForm = function(id) {
+    const m        = id ? dbGet(KEYS.maintenance, id) : {};
+    const vehicles = db(KEYS.vehicles);
+    const vehOpts  = vehicles.map(v => `<option value="${v.id}"${m.vehicleId===v.id?' selected':''}>${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('');
+    const selTypes = Array.isArray(m.types) ? m.types : (m.type ? [m.type] : []);
+    const typePills = TYPES.map(t => {
+      const sel = selTypes.includes(t);
+      return `<label style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:var(--card);border:1px solid ${sel ? 'var(--accent)' : 'var(--border)'};border-radius:20px;cursor:pointer;font-size:12px">
+        <input type="checkbox" class="maint-type-cb" value="${t}" ${sel ? 'checked' : ''} onchange="maintAutoSuggest()" style="accent-color:var(--accent)">
+        ${esc(t)}
+      </label>`;
+    }).join('');
+
+    showModal(id ? 'Edit Maintenance' : 'Tambah Maintenance', `<div class="form-grid">
+      <div class="form-group">
+        <label>Kendaraan</label>
+        <select id="mf-veh"><option value="">-- Pilih Kendaraan --</option>${vehOpts}</select>
+      </div>
+      <div class="form-group">
+        <label>Tanggal</label>
+        <input id="mf-date" type="date" value="${m.date || new Date().toISOString().slice(0,10)}" onchange="maintAutoSuggest()">
+      </div>
+      <div class="form-group">
+        <label>Jenis Servis <span style="color:var(--muted);font-size:11px">— boleh pilih lebih dari satu</span></label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">${typePills}</div>
+      </div>
+      <div class="form-group"><label>Keterangan</label><input id="mf-desc" value="${esc(m.description||'')}" placeholder="cth: Shell Helix HX7 10W-40, AHASS"></div>
+      <div class="form-group"><label>Bengkel</label><input id="mf-ws" value="${esc(m.workshop||'')}" placeholder="AHASS Honda, Bengkel Resmi"></div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Odometer (km)</label><input id="mf-odo" type="number" value="${m.odometer||''}" placeholder="12500" onchange="maintAutoSuggest()"></div>
+        <div class="form-group"><label>Biaya (Rp)</label><input id="mf-cost" type="number" value="${m.cost||''}" placeholder="150000"></div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label>Next Due Tanggal <span style="color:var(--accent);font-size:11px">(auto-suggest)</span></label>
+          <input id="mf-ndate" type="date" value="${m.nextDueDate||''}">
+        </div>
+        <div class="form-group">
+          <label>Next Due Odometer (km) <span style="color:var(--accent);font-size:11px">(auto-suggest)</span></label>
+          <input id="mf-nodo" type="number" value="${m.nextDueOdometer||''}" placeholder="—">
+        </div>
+      </div>
+    </div>`, () => {
+      const vehicleId = document.getElementById('mf-veh').value;
+      if (!vehicleId) { toast('Pilih kendaraan terlebih dahulu', 'error'); return; }
+      const types = [...document.querySelectorAll('.maint-type-cb:checked')].map(cb => cb.value);
+      if (!types.length) { toast('Pilih minimal satu jenis servis', 'error'); return; }
+      const rec = {
+        vehicleId,
+        date:            document.getElementById('mf-date').value,
+        types,
+        description:     document.getElementById('mf-desc').value.trim(),
+        workshop:        document.getElementById('mf-ws').value.trim(),
+        odometer:        parseInt(document.getElementById('mf-odo').value) || null,
+        cost:            parseInt(document.getElementById('mf-cost').value) || null,
+        nextDueDate:     document.getElementById('mf-ndate').value || null,
+        nextDueOdometer: parseInt(document.getElementById('mf-nodo').value) || null,
+      };
+      if (id) dbUpdate(KEYS.maintenance, id, rec); else dbAdd(KEYS.maintenance, rec);
+      closeModal(); toast(id ? 'Maintenance diperbarui' : 'Maintenance dicatat'); render();
+    });
+  };
+
+  window.deleteMaint = function(id) {
+    if (!confirm('Hapus catatan maintenance ini?')) return;
+    dbDelete(KEYS.maintenance, id); toast('Maintenance dihapus', 'error'); render();
+  };
+
+  render();
+}
+
+function pageSpareparts(el) {
+  const SUGGESTIONS = [
+    'Kampas Rem Depan','Kampas Rem Belakang','Ban Depan','Ban Belakang',
+    'Rantai','Sprocket Depan','Sprocket Belakang','Gear Set',
+    'Oli Mesin','Filter Oli','Filter Udara','Busi','Aki',
+    'Bearing Roda Depan','Bearing Roda Belakang','Sokbreker Depan','Sokbreker Belakang',
+    'Kopling','Kabel Gas','Kabel Rem','Lampu Depan','Lampu Belakang',
+  ];
+  const PART_KM = {
+    'Kampas Rem Depan': 15000,'Kampas Rem Belakang': 10000,
+    'Ban Depan': 20000,'Ban Belakang': 15000,
+    'Rantai': 10000,'Sprocket Depan': 25000,'Sprocket Belakang': 15000,'Gear Set': 15000,
+    'Oli Mesin': 3000,'Filter Oli': 6000,'Filter Udara': 10000,'Busi': 8000,
+    'Bearing Roda Depan': 30000,'Bearing Roda Belakang': 30000,
+  };
+  const PART_DAYS = {
+    'Ban Depan': 730,'Ban Belakang': 730,'Aki': 730,
+    'Oli Mesin': 90,'Filter Oli': 180,'Filter Udara': 180,
+  };
+
+  function estOdometer(vehicleId) {
+    const logs = db(KEYS.fuelLogs).filter(l => l.vehicleId === vehicleId && l.odometer);
+    return logs.length ? Math.max(...logs.map(l => Number(l.odometer))) : null;
+  }
+
+  window.partAutoSuggest = function() {
+    const partName = document.getElementById('sp-name').value;
+    const date     = document.getElementById('sp-date').value;
+    const odo      = parseInt(document.getElementById('sp-odo').value) || null;
+    if (date && PART_DAYS[partName]) {
+      const d = new Date(date + 'T00:00'); d.setDate(d.getDate() + PART_DAYS[partName]);
+      document.getElementById('sp-ndate').value = d.toISOString().slice(0, 10);
+    }
+    if (odo && PART_KM[partName]) {
+      document.getElementById('sp-nodo').value = odo + PART_KM[partName];
+    }
+  };
+
+  function render() {
+    const parts    = [...db(KEYS.spareParts)].sort((a, b) => new Date(b.replacedDate) - new Date(a.replacedDate));
+    const vehicles = db(KEYS.vehicles);
+
+    const tbody = parts.length === 0
+      ? `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:24px">Belum ada catatan spare part.</td></tr>`
+      : parts.map(p => {
+          const veh      = vehicles.find(v => v.id === p.vehicleId);
+          const currOdo  = estOdometer(p.vehicleId);
+          const kmUsed   = (currOdo && p.odometerAt) ? currOdo - Number(p.odometerAt) : null;
+          const nextKm   = p.nextDueOdometer ? Number(p.nextDueOdometer) : null;
+          const kmLeft   = (nextKm && currOdo) ? nextKm - currOdo : null;
+
+          let nextBadge  = '-', statusBadge = '';
+          if (p.nextDueDate) {
+            nextBadge = expiryBadge(p.nextDueDate);
+            const d = daysUntil(p.nextDueDate);
+            statusBadge = d < 0 ? `<span class="badge badge-danger">Ganti!</span>` :
+                          d <= 30 ? `<span class="badge badge-warning">Segera</span>` :
+                          `<span class="badge badge-success">OK</span>`;
+          } else if (nextKm && currOdo !== null) {
+            nextBadge = `<span class="badge badge-muted">${fmtNum(nextKm)} km</span>`;
+            statusBadge = kmLeft <= 0 ? `<span class="badge badge-danger">Ganti!</span>` :
+                          kmLeft <= 500 ? `<span class="badge badge-warning">Segera</span>` :
+                          `<span class="badge badge-success">OK</span>`;
+          } else if (nextKm) {
+            nextBadge = `<span class="badge badge-muted">${fmtNum(nextKm)} km</span>`;
+          }
+
+          return `<tr>
+            <td><strong>${esc(p.partName)}</strong></td>
+            <td>${esc(veh ? veh.plate : '-')}</td>
+            <td><span class="badge ${p.category === 'wearable' ? 'badge-warning' : 'badge-muted'}">${p.category === 'wearable' ? 'Wearable' : 'Permanen'}</span></td>
+            <td>${fmtDate(p.replacedDate)}</td>
+            <td>${p.odometerAt ? fmtNum(p.odometerAt) + ' km' : '-'}</td>
+            <td>${kmUsed !== null ? fmtNum(Math.round(kmUsed)) + ' km' : '-'}</td>
+            <td>${p.brand ? esc(p.brand) : '-'}</td>
+            <td>${p.cost ? fmtCur(p.cost) : '-'}</td>
+            <td>${nextBadge}</td>
+            <td>${statusBadge || '-'}</td>
+            <td><div class="td-actions">
+              <button class="btn btn-ghost btn-sm" onclick="openPartForm('${p.id}')">${IC.edit}</button>
+              <button class="btn btn-ghost btn-sm text-danger" onclick="deletePart('${p.id}')">${IC.trash}</button>
+            </div></td>
+          </tr>`;
+        }).join('');
+
+    el.innerHTML = `<div class="page">
+      <div class="page-header">
+        <div><div class="page-title">Spare Parts</div><div class="page-sub">Monitoring penggantian komponen &amp; lifetime tracking</div></div>
+        <button class="btn btn-primary" onclick="openPartForm()">${IC.plus} Tambah</button>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Komponen</th><th>Kendaraan</th><th>Tipe</th><th>Diganti</th><th>Odo Ganti</th><th>Pemakaian</th><th>Merek</th><th>Biaya</th><th>Next Due</th><th>Status</th><th></th></tr></thead>
+        <tbody>${tbody}</tbody>
+      </table></div>
+    </div>`;
+  }
+
+  window.openPartForm = function(id) {
+    const p        = id ? dbGet(KEYS.spareParts, id) : {};
+    const vehicles = db(KEYS.vehicles);
+    const vehOpts  = vehicles.map(v => `<option value="${v.id}"${p.vehicleId===v.id?' selected':''}>${esc(v.plate)} — ${esc(v.brand)} ${esc(v.model)}</option>`).join('');
+    const suggList = SUGGESTIONS.map(s => `<option value="${s}">`).join('');
+
+    showModal(id ? 'Edit Spare Part' : 'Tambah Spare Part', `
+      <datalist id="part-suggestions">${suggList}</datalist>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Kendaraan</label>
+          <select id="sp-veh"><option value="">-- Pilih Kendaraan --</option>${vehOpts}</select>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Nama Komponen</label>
+            <input id="sp-name" list="part-suggestions" value="${esc(p.partName||'')}" placeholder="Kampas Rem Depan" oninput="partAutoSuggest()">
+          </div>
+          <div class="form-group">
+            <label>Tipe</label>
+            <select id="sp-cat">
+              <option value="wearable"${(!p.category || p.category==='wearable') ? ' selected' : ''}>Wearable (rutin ganti)</option>
+              <option value="non-wearable"${p.category==='non-wearable' ? ' selected' : ''}>Permanen (ganti kalau rusak)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Tanggal Diganti</label>
+            <input id="sp-date" type="date" value="${p.replacedDate || new Date().toISOString().slice(0,10)}" onchange="partAutoSuggest()">
+          </div>
+          <div class="form-group">
+            <label>Odometer Saat Ganti (km)</label>
+            <input id="sp-odo" type="number" value="${p.odometerAt||''}" placeholder="12500" onchange="partAutoSuggest()">
+          </div>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group"><label>Merek</label><input id="sp-brand" value="${esc(p.brand||'')}" placeholder="Federal, NGK, Bosch..."></div>
+          <div class="form-group"><label>Biaya (Rp)</label><input id="sp-cost" type="number" value="${p.cost||''}" placeholder="150000"></div>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Next Due Tanggal <span style="color:var(--accent);font-size:11px">(auto-suggest)</span></label>
+            <input id="sp-ndate" type="date" value="${p.nextDueDate||''}">
+          </div>
+          <div class="form-group">
+            <label>Next Due Odometer (km) <span style="color:var(--accent);font-size:11px">(auto-suggest)</span></label>
+            <input id="sp-nodo" type="number" value="${p.nextDueOdometer||''}" placeholder="—">
+          </div>
+        </div>
+        <div class="form-group"><label>Catatan</label><textarea id="sp-notes">${esc(p.notes||'')}</textarea></div>
+      </div>`, () => {
+      const vehicleId = document.getElementById('sp-veh').value;
+      const partName  = document.getElementById('sp-name').value.trim();
+      if (!vehicleId) { toast('Pilih kendaraan', 'error'); return; }
+      if (!partName)  { toast('Isi nama komponen', 'error'); return; }
+      const rec = {
+        vehicleId, partName,
+        category:        document.getElementById('sp-cat').value,
+        brand:           document.getElementById('sp-brand').value.trim(),
+        replacedDate:    document.getElementById('sp-date').value,
+        odometerAt:      parseInt(document.getElementById('sp-odo').value) || null,
+        nextDueDate:     document.getElementById('sp-ndate').value || null,
+        nextDueOdometer: parseInt(document.getElementById('sp-nodo').value) || null,
+        cost:            parseInt(document.getElementById('sp-cost').value) || null,
+        notes:           document.getElementById('sp-notes').value.trim(),
+      };
+      if (id) dbUpdate(KEYS.spareParts, id, rec); else dbAdd(KEYS.spareParts, rec);
+      closeModal(); toast(id ? 'Spare part diperbarui' : 'Spare part dicatat'); render();
+    });
+  };
+
+  window.deletePart = function(id) {
+    if (!confirm('Hapus catatan spare part ini?')) return;
+    dbDelete(KEYS.spareParts, id); toast('Spare part dihapus', 'error'); render();
+  };
+
+  render();
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+function init() {
+  buildSidebar();
+  document.getElementById('modal-save-btn').addEventListener('click', () => { if (_modalSave) _modalSave(); });
+  navigate('dashboard');
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
