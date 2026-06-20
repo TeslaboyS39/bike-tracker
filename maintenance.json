@@ -1,0 +1,20 @@
+[
+  {
+    "id": "6d004248-2e54-4ae5-8c30-4b67e317cfa4",
+    "createdAt": "2026-06-15T01:56:35.291Z",
+    "vehicleId": "c4e6a144-6469-4fa4-b409-9d449de786ea",
+    "date": "2026-06-13",
+    "type": "Servis Berkala",
+    "description": "Servis rutin pertama kali paska beli dan ganti oli Shell 10W-50",
+    "workshop": "Benelli Dewi Sartika",
+    "odometer": 11990,
+    "cost": 195000,
+    "nextDueDate": "2026-09-10",
+    "nextDueOdometer": 14990,
+    "types": [
+      "Ganti Oli",
+      "Servis Berkala"
+    ],
+    "updatedAt": "2026-06-15T02:07:47.635Z"
+  }
+]

@@ -1,0 +1,19 @@
+[
+  {
+    "id": "c4e6a144-6469-4fa4-b409-9d449de786ea",
+    "createdAt": "2026-06-15T00:32:32.660Z",
+    "name": "Motor",
+    "plate": "B 5733 BAI",
+    "brand": "Benelli",
+    "model": "Motobi 152",
+    "year": 2020,
+    "cc": 149,
+    "color": "Hitam-Merah",
+    "fuelType": "Pertalite",
+    "fuelCapacity": 12.1,
+    "theoreticalConsumption": 32.5,
+    "odometer": 11990,
+    "status": "active",
+    "notes": ""
+  }
+]

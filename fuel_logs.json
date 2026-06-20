@@ -1,0 +1,26 @@
+[
+  {
+    "id": "28bd717b-2c7e-49e8-b38c-d2a3c9512ce4",
+    "createdAt": "2026-06-15T00:53:49.914Z",
+    "vehicleId": "c4e6a144-6469-4fa4-b409-9d449de786ea",
+    "date": "2026-06-07",
+    "liters": 7,
+    "pricePerLiter": 10000,
+    "odometer": 11703,
+    "station": "Jatiwarna",
+    "notes": ""
+  },
+  {
+    "id": "1ef4c7c0-ea76-4fa5-b93b-3065645dac12",
+    "createdAt": "2026-06-15T00:55:02.434Z",
+    "vehicleId": "c4e6a144-6469-4fa4-b409-9d449de786ea",
+    "date": "2026-06-13",
+    "liters": 7.9,
+    "pricePerLiter": 10000,
+    "odometer": 11990,
+    "station": "Jatiwarna",
+    "notes": "",
+    "time": "11:44",
+    "updatedAt": "2026-06-15T01:24:36.799Z"
+  }
+]
