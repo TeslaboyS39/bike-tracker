@@ -240,6 +240,18 @@
     .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
     .legend-dot  { width: 10px; height: 10px; border-radius: 2px; }
 
+    /* ── Nav groups (collapsible) ── */
+    .nav-group-hd {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 16px 4px;
+      font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--muted);
+      cursor: pointer; user-select: none; transition: color 0.12s;
+    }
+    .nav-group-hd:hover { color: var(--text); }
+    .nav-chevron { display: flex; transition: transform 0.2s; opacity: 0.55; }
+    .nav-group-body { overflow: hidden; transition: max-height 0.25s ease; }
+
     /* ── Misc ── */
     .text-muted { color: var(--muted); }
     .text-danger { color: var(--danger); }
@@ -265,7 +277,7 @@
     </div>
     <div id="modal-body"></div>
     <div id="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal()">Batal</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" id="modal-save-btn">Simpan</button>
     </div>
   </div>

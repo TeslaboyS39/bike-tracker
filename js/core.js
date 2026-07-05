@@ -85,46 +85,91 @@ function navigate(id) {
 
 // ── SIDEBAR ────────────────────────────────────────────────────────────────
 const NAV = [
-  { section: 'MASTER' },
-  { id: 'vehicles',        label: 'Vehicle',          icon: 'vehicle'  },
-  { id: 'drivers',         label: 'Driver',           icon: 'driver'   },
-  { id: 'driverLicenses',  label: 'Driver License',   icon: 'idcard'   },
-  { id: 'vehicleLicenses', label: 'Vehicle License',  icon: 'document' },
-  { id: 'geofences',       label: 'Geofence Library', icon: 'mappin'   },
-  { section: 'TRANSACTIONAL' },
-  { id: 'dashboard',       label: 'Dashboard',        icon: 'grid'     },
-  { id: 'tracking',        label: 'Tracking',         icon: 'map'      },
-  { id: 'tripLog',         label: 'Trip Log',         icon: 'route'    },
-  { id: 'fuelLog',         label: 'Fuel Log',         icon: 'droplet'  },
-  { id: 'fuelReport',      label: 'Fuel Report',      icon: 'chart'    },
-  { id: 'maintenance',     label: 'Maintenance',      icon: 'wrench'   },
-  { id: 'spareParts',      label: 'Spare Parts',      icon: 'package'  },
+  { id: 'dashboard', label: 'Dashboard', icon: 'grid' },
+  { section: 'MASTER', key: 'master', items: [
+    { id: 'vehicles',        label: 'Vehicle',         icon: 'vehicle'  },
+    { id: 'drivers',         label: 'Driver',          icon: 'driver'   },
+    { id: 'driverLicenses',  label: 'Driver License',  icon: 'idcard'   },
+    { id: 'vehicleLicenses', label: 'Vehicle License', icon: 'document' },
+    { id: 'geofences',       label: 'Geofence Library',icon: 'mappin'   },
+  ]},
+  { section: 'TRANSACTIONAL', key: 'txn', items: [
+    { id: 'tracking',    label: 'Tracking',    icon: 'map'     },
+    { id: 'tripLog',     label: 'Trip Log',    icon: 'route'   },
+    { id: 'fuelLog',     label: 'Fuel Log',    icon: 'droplet' },
+    { id: 'fuelReport',  label: 'Fuel Report', icon: 'chart'   },
+    { id: 'maintenance', label: 'Maintenance', icon: 'wrench'  },
+    { id: 'spareParts',  label: 'Spare Parts', icon: 'package' },
+  ]},
 ];
+
+const _navCollapsed = { master: false, txn: false };
+const _IC_chev = `<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><polyline points="6,9 12,15 18,9"/></svg>`;
+
+function _toggleNavGroup(key) {
+  _navCollapsed[key] = !_navCollapsed[key];
+  const body = document.getElementById(`nav-grp-${key}`);
+  const collapsed = _navCollapsed[key];
+  body.style.maxHeight = collapsed ? '0' : '1000px';
+  const chevron = body.previousElementSibling.querySelector('.nav-chevron');
+  chevron.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+}
+
+const _IC_logo = `<svg width="34" height="34" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="34" height="34" rx="9" fill="#4f7af8"/>
+  <path d="M9 25 C9 19 13 17 17 17 C21 17 25 15 25 9" stroke="rgba(255,255,255,0.45)" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <circle cx="9" cy="25" r="2.8" fill="rgba(255,255,255,0.6)"/>
+  <circle cx="25" cy="9" r="3.4" fill="white"/>
+  <circle cx="25" cy="9" r="1.6" fill="#4f7af8"/>
+</svg>`;
 
 function buildSidebar() {
   const nav = document.getElementById('sidebar');
-  nav.innerHTML = `<div class="brand"><div class="brand-name">VMS</div><div class="brand-sub">Vehicle Monitoring System</div></div>`;
-  let firstSection = true;
+  nav.innerHTML = `<div class="brand">
+    <div style="display:flex;align-items:center;gap:10px">
+      ${_IC_logo}
+      <div>
+        <div class="brand-name">VMS</div>
+        <div class="brand-sub">Vehicle Monitoring System</div>
+      </div>
+    </div>
+  </div>`;
+
   NAV.forEach(item => {
-    if (item.section) {
-      if (!firstSection) {
-        const div = document.createElement('div');
-        div.className = 'nav-divider';
-        div.style.display = 'block';
-        nav.appendChild(div);
-      }
-      firstSection = false;
-      const s = document.createElement('div');
-      s.className = 'nav-section';
-      s.textContent = item.section;
-      nav.appendChild(s);
-    } else {
+    if (!item.section) {
       const el = document.createElement('div');
       el.className = 'nav-item';
+      el.style.marginTop = '8px';
       el.dataset.page = item.id;
       el.innerHTML = IC[item.icon] + `<span>${item.label}</span>`;
       el.addEventListener('click', () => navigate(item.id));
       nav.appendChild(el);
+    } else {
+      const collapsed = _navCollapsed[item.key];
+      const group = document.createElement('div');
+
+      const hd = document.createElement('div');
+      hd.className = 'nav-group-hd';
+      hd.innerHTML = `<span>${item.section}</span><span class="nav-chevron" style="${collapsed ? 'transform:rotate(-90deg)' : ''}">${_IC_chev}</span>`;
+      hd.addEventListener('click', () => _toggleNavGroup(item.key));
+
+      const body = document.createElement('div');
+      body.className = 'nav-group-body';
+      body.id = `nav-grp-${item.key}`;
+      body.style.maxHeight = collapsed ? '0' : '1000px';
+
+      item.items.forEach(child => {
+        const el = document.createElement('div');
+        el.className = 'nav-item';
+        el.dataset.page = child.id;
+        el.innerHTML = IC[child.icon] + `<span>${child.label}</span>`;
+        el.addEventListener('click', () => navigate(child.id));
+        body.appendChild(el);
+      });
+
+      group.appendChild(hd);
+      group.appendChild(body);
+      nav.appendChild(group);
     }
   });
 
@@ -290,6 +335,155 @@ function pointInPolygon(point, polygon) {
     if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi + 1e-10) + xi)) inside = !inside;
   }
   return inside;
+}
+
+// ── GEAR / HARSHNESS COLORS ────────────────────────────────────────────────
+const GEAR_COLORS = ['#7b8099','#a78bfa','#4f7af8','#22c55e','#f59e0b','#f97316','#ef4444'];
+// index 0 = neutral/stop, 1=G1, 2=G2, 3=G3, 4=G4, 5=G5, 6=G6+
+
+function getGearColor(gear) { return GEAR_COLORS[Math.min(gear, GEAR_COLORS.length - 1)]; }
+
+function getHarshnessColor(h) {
+  return h === 'harsh_accel'    ? '#ef4444'
+       : h === 'moderate_accel' ? '#f97316'
+       : h === 'smooth'         ? '#22c55e'
+       : h === 'moderate_brake' ? '#f59e0b'
+       : h === 'harsh_brake'    ? '#7c3aed'
+       : '#7b8099';
+}
+
+// ── RIDING ANALYSIS ────────────────────────────────────────────────────────
+function enrichPoints(points, gearConfig) {
+  if (!gearConfig || !gearConfig.length) return points.map(p => ({ ...p, estimatedGear: null, harshness: null, accel: null }));
+
+  const sorted = [...gearConfig].sort((a, b) => a.gear - b.gear);
+
+  // 3-point moving average on speed to reduce GPS noise
+  const smooth = points.map((p, i) => {
+    const prev = points[i - 1]?.speed ?? p.speed;
+    const next = points[i + 1]?.speed ?? p.speed;
+    return (prev + p.speed + next) / 3;
+  });
+
+  const result = [];
+  let prevGear = 1;
+
+  for (let i = 0; i < points.length; i++) {
+    const p   = points[i];
+    const spd = smooth[i];
+
+    let estimatedGear = 0;
+    if (spd > 0.5) {
+      const candidates = sorted.filter(g => spd >= g.minKmh && spd <= g.maxKmh);
+      if (candidates.length === 0) {
+        // outside all ranges — pick nearest
+        estimatedGear = spd < sorted[0].minKmh
+          ? sorted[0].gear
+          : sorted[sorted.length - 1].gear;
+      } else if (candidates.some(g => g.gear === prevGear)) {
+        estimatedGear = prevGear; // hysteresis
+      } else {
+        estimatedGear = candidates.reduce((best, g) =>
+          Math.abs(g.gear - prevGear) < Math.abs(best.gear - prevGear) ? g : best
+        ).gear;
+      }
+      prevGear = estimatedGear;
+    }
+
+    // acceleration (km/h per second)
+    let accel = null, harshness = 'smooth';
+    if (i > 0 && p.time && points[i - 1].time) {
+      const dt = (new Date(p.time) - new Date(points[i - 1].time)) / 1000;
+      if (dt > 0) {
+        accel = (spd - smooth[i - 1]) / dt;
+        harshness = accel >  3   ? 'harsh_accel'
+                  : accel >  1.5 ? 'moderate_accel'
+                  : accel < -3   ? 'harsh_brake'
+                  : accel < -1.5 ? 'moderate_brake'
+                  : 'smooth';
+      }
+    }
+
+    result.push({ ...p, estimatedGear, harshness, accel });
+  }
+  return result;
+}
+
+function computeRidingAnalysis(enriched, gearConfig) {
+  if (!gearConfig || !gearConfig.length) return null;
+
+  const moving    = enriched.filter(p => p.estimatedGear > 0);
+  const withTime  = enriched.filter(p => p.harshness !== null);
+  const total     = moving.length || 1;
+  const totalH    = withTime.length || 1;
+
+  // gear distribution (% of moving time)
+  const gearDist = {};
+  moving.forEach(p => { gearDist[p.estimatedGear] = (gearDist[p.estimatedGear] || 0) + 1; });
+  Object.keys(gearDist).forEach(g => { gearDist[g] = Math.round(gearDist[g] / total * 100); });
+
+  // harshness distribution
+  const hCounts = { smooth: 0, moderate_accel: 0, harsh_accel: 0, moderate_brake: 0, harsh_brake: 0 };
+  withTime.forEach(p => { if (p.harshness in hCounts) hCounts[p.harshness]++; });
+  const smoothness = {};
+  Object.keys(hCounts).forEach(k => { smoothness[k] = Math.round(hCounts[k] / totalH * 100); });
+
+  // rev-hang: speed > gear.maxKmh for 3+ consecutive points
+  let revHangCount = 0, lugCount = 0;
+  const sorted = [...gearConfig].sort((a, b) => a.gear - b.gear);
+  let revRun = 0, lugRun = 0;
+  moving.forEach(p => {
+    const gcfg = sorted.find(g => g.gear === p.estimatedGear);
+    if (gcfg) {
+      revRun = p.accel > 0 && p.estimatedGear < sorted[sorted.length - 1].gear && p.speed > gcfg.maxKmh ? revRun + 1 : 0;
+      lugRun = p.estimatedGear > sorted[0].gear && p.speed < gcfg.minKmh * 0.7 ? lugRun + 1 : 0;
+      if (revRun === 3) revHangCount++;
+      if (lugRun === 3) lugCount++;
+    }
+  });
+
+  // score
+  const optimalPct  = moving.filter(p => {
+    const gcfg = sorted.find(g => g.gear === p.estimatedGear);
+    return gcfg && p.speed >= gcfg.minKmh && p.speed <= gcfg.maxKmh;
+  }).length / total;
+  const smoothPct   = hCounts.smooth / totalH;
+  const gearEff     = 1 - Math.min((revHangCount + lugCount) / Math.max(total / 30, 1), 1);
+  const score       = Math.round((optimalPct * 0.4 + smoothPct * 0.4 + gearEff * 0.2) * 100);
+  const scoreLabel  = score >= 85 ? 'Excellent' : score >= 70 ? 'Good' : score >= 55 ? 'Fair' : 'Poor';
+  const scoreColor  = score >= 85 ? 'var(--success)' : score >= 70 ? 'var(--accent)' : score >= 55 ? 'var(--warning)' : 'var(--danger)';
+
+  return { score, scoreLabel, scoreColor, gearDist, smoothness, revHangCount, lugCount, hasGearData: true };
+}
+
+function buildGearTrack(points) {
+  const layers = []; let segStart = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const cc = getGearColor(points[i].estimatedGear ?? 0);
+    const nc = getGearColor(points[i + 1].estimatedGear ?? 0);
+    if (nc !== cc) {
+      layers.push(L.polyline(points.slice(segStart, i + 2).map(p => [p.lat, p.lon]), { color: cc, weight: 5, opacity: 0.9 }));
+      segStart = i + 1;
+    }
+  }
+  if (segStart < points.length - 1)
+    layers.push(L.polyline(points.slice(segStart).map(p => [p.lat, p.lon]), { color: getGearColor(points[segStart].estimatedGear ?? 0), weight: 5, opacity: 0.9 }));
+  return L.featureGroup(layers);
+}
+
+function buildHarshnessTrack(points) {
+  const layers = []; let segStart = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const cc = getHarshnessColor(points[i].harshness);
+    const nc = getHarshnessColor(points[i + 1].harshness);
+    if (nc !== cc) {
+      layers.push(L.polyline(points.slice(segStart, i + 2).map(p => [p.lat, p.lon]), { color: cc, weight: 5, opacity: 0.9 }));
+      segStart = i + 1;
+    }
+  }
+  if (segStart < points.length - 1)
+    layers.push(L.polyline(points.slice(segStart).map(p => [p.lat, p.lon]), { color: getHarshnessColor(points[segStart].harshness), weight: 5, opacity: 0.9 }));
+  return L.featureGroup(layers);
 }
 
 function _stub(title) {

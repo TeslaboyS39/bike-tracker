@@ -1,6 +1,6 @@
 function pageTracking(el) {
   let tMap = null, tTrackLayer = null, tStartM = null, tEndM = null, tPlayM = null;
-  let tPoints = [], tCurrentTrack = null, tPlayInterval = null;
+  let tPoints = [], tEnriched = [], tCurrentTrack = null, tPlayInterval = null, tTrackMode = 'speed';
 
   el.innerHTML = `
     <div class="tracking-panel">
@@ -58,6 +58,21 @@ function pageTracking(el) {
         <div id="tr-gf-list" style="max-height:120px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
       </div>
 
+      <div id="tr-mode-section" class="panel-section" style="display:none">
+        <div class="panel-section-title">Track View</div>
+        <div style="display:flex;gap:4px">
+          <button id="tr-mode-speed" class="btn btn-primary btn-sm" style="flex:1;font-size:11px" onclick="setTrackMode('speed')">Speed</button>
+          <button id="tr-mode-gear"  class="btn btn-secondary btn-sm" style="flex:1;font-size:11px" onclick="setTrackMode('gear')">Gear</button>
+          <button id="tr-mode-harsh" class="btn btn-secondary btn-sm" style="flex:1;font-size:11px" onclick="setTrackMode('harshness')">Harshness</button>
+        </div>
+        <div id="tr-mode-legend" style="margin-top:8px"></div>
+      </div>
+
+      <div id="tr-analysis-section" class="panel-section" style="display:none">
+        <div class="panel-section-title">Riding Analysis</div>
+        <div id="tr-analysis-body"></div>
+      </div>
+
       <div style="margin-top:auto;padding-top:12px">
         <button class="btn btn-primary" style="width:100%;display:none" id="tr-save-btn">Save Trip</button>
       </div>
@@ -66,7 +81,10 @@ function pageTracking(el) {
 
   loadLeaflet().then(() => {
     tMap = L.map('tracking-map').setView([-6.2, 106.9], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(tMap);
+    const _streetL = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 });
+    const _satL    = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 19 });
+    _streetL.addTo(tMap);
+    L.control.layers({ 'Street': _streetL, 'Satellite': _satL }, {}, { position: 'topright' }).addTo(tMap);
     if (L.Control.Geocoder) {
       L.Control.geocoder({ defaultMarkGeocode: false, geocoder: L.Control.Geocoder.nominatim() })
         .on('markgeocode', e => tMap.fitBounds(e.geocode.bbox))
@@ -99,15 +117,25 @@ function pageTracking(el) {
 
   function renderTrack(parsed) {
     const { points, name, format } = parsed;
-    tPoints = points; tCurrentTrack = { ...parsed, stats: computeStats(points) };
+    tPoints = points;
+    tCurrentTrack = { ...parsed, stats: computeStats(points) };
+
+    // enrich with gear + harshness if vehicle is linked
+    const vehicleId = parsed.vehicleId || null;
+    const vehicle   = vehicleId ? dbGet(KEYS.vehicles, vehicleId) : null;
+    const gearCfg   = vehicle?.gearConfig?.length ? vehicle.gearConfig : null;
+    tEnriched = enrichPoints(points, gearCfg);
+
+    tTrackMode = 'speed';
     if (tTrackLayer) tMap.removeLayer(tTrackLayer);
-    if (tStartM) tMap.removeLayer(tStartM);
-    if (tEndM) tMap.removeLayer(tEndM);
+    if (tStartM)     tMap.removeLayer(tStartM);
+    if (tEndM)       tMap.removeLayer(tEndM);
     tTrackLayer = buildSpeedTrack(points).addTo(tMap);
     const ll = points.map(p => [p.lat, p.lon]);
     tStartM = L.marker(ll[0]).addTo(tMap).bindPopup('<b>Start</b>');
-    tEndM   = L.marker(ll[ll.length-1]).addTo(tMap).bindPopup('<b>End</b>');
+    tEndM   = L.marker(ll[ll.length - 1]).addTo(tMap).bindPopup('<b>End</b>');
     tMap.fitBounds(tTrackLayer.getBounds(), { padding: [40, 40] });
+
     const s = tCurrentTrack.stats;
     document.getElementById('tr-dist').innerHTML   = s.distanceKm.toFixed(2) + '<span class="stat-unit">km</span>';
     document.getElementById('tr-dur').textContent  = s.duration;
@@ -115,16 +143,106 @@ function pageTracking(el) {
     document.getElementById('tr-avgspd').innerHTML = s.avgSpeed.toFixed(1) + '<span class="stat-unit">km/h</span>';
     document.getElementById('tr-elev').innerHTML   = s.elevGain + '/' + s.elevLoss + '<span class="stat-unit">m</span>';
     document.getElementById('tr-pts').textContent  = points.length;
-    document.getElementById('tr-stats-panel').style.display  = '';
+    document.getElementById('tr-stats-panel').style.display   = '';
     document.getElementById('tr-playback-panel').style.display = '';
     document.getElementById('tr-legend').style.display = points.some(p => p.speed > 0) ? '' : 'none';
+
     const slider = document.getElementById('tr-slider');
     slider.max = points.length - 1; slider.value = 0;
     updateMarker(0);
     document.getElementById('tr-save-btn').style.display = '';
+
+    // show mode toggle only if gear config available
+    const modeSection = document.getElementById('tr-mode-section');
+    if (gearCfg) {
+      modeSection.style.display = '';
+      setTrackMode('speed');
+      renderAnalysisPanel(gearCfg);
+    } else {
+      modeSection.style.display = 'none';
+      document.getElementById('tr-analysis-section').style.display = 'none';
+    }
+
     if (format === 'KML') showInfo('KML has no per-point time & speed data.', 'info');
     else showInfo('Loaded successfully. ' + points.length + ' points.', 'success');
     renderGfEvents();
+  }
+
+  window.setTrackMode = function(mode) {
+    tTrackMode = mode;
+    ['speed','gear','harshness'].forEach(m => {
+      const btn = document.getElementById(`tr-mode-${m}`);
+      if (btn) btn.className = `btn btn-sm ${m === mode ? 'btn-primary' : 'btn-secondary'}`;
+      if (btn) btn.style.flex = '1'; if (btn) btn.style.fontSize = '11px';
+    });
+    if (tTrackLayer) tMap.removeLayer(tTrackLayer);
+    if      (mode === 'gear')      tTrackLayer = buildGearTrack(tEnriched).addTo(tMap);
+    else if (mode === 'harshness') tTrackLayer = buildHarshnessTrack(tEnriched).addTo(tMap);
+    else                           tTrackLayer = buildSpeedTrack(tPoints).addTo(tMap);
+    renderModeLegend(mode);
+  };
+
+  function renderModeLegend(mode) {
+    const el2 = document.getElementById('tr-mode-legend');
+    if (mode === 'speed') { el2.innerHTML = ''; return; }
+    if (mode === 'gear') {
+      el2.innerHTML = `<div class="speed-legend" style="flex-wrap:wrap;gap:4px">
+        ${GEAR_COLORS.slice(1).map((c, i) => `<span class="speed-swatch" style="background:${c}">G${i+1}</span>`).join('')}
+        <span class="speed-swatch" style="background:${GEAR_COLORS[0]}">Stop</span>
+      </div>`;
+    } else {
+      el2.innerHTML = `<div class="speed-legend" style="flex-wrap:wrap;gap:4px">
+        <span class="speed-swatch" style="background:#22c55e">Smooth</span>
+        <span class="speed-swatch" style="background:#f97316">Mod.Acc</span>
+        <span class="speed-swatch" style="background:#ef4444">Harsh Acc</span>
+        <span class="speed-swatch" style="background:#f59e0b">Mod.Brk</span>
+        <span class="speed-swatch" style="background:#7c3aed">Harsh Brk</span>
+      </div>`;
+    }
+  }
+
+  function renderAnalysisPanel(gearCfg) {
+    const analysis = computeRidingAnalysis(tEnriched, gearCfg);
+    const sec      = document.getElementById('tr-analysis-section');
+    const body     = document.getElementById('tr-analysis-body');
+    if (!analysis) { sec.style.display = 'none'; return; }
+    sec.style.display = '';
+
+    const gearBars = Object.entries(analysis.gearDist).sort((a,b) => a[0]-b[0]).map(([g, pct]) => {
+      const color = getGearColor(Number(g));
+      return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+        <div style="font-size:10px;color:var(--muted);width:20px;text-align:right">G${g}</div>
+        <div style="flex:1;background:var(--border);border-radius:2px;height:7px">
+          <div style="width:${pct}%;background:${color};height:7px;border-radius:2px"></div>
+        </div>
+        <div style="font-size:10px;color:var(--muted);width:26px">${pct}%</div>
+      </div>`;
+    }).join('');
+
+    const sm = analysis.smoothness;
+    const hasSm = Object.values(sm).some(v => v > 0);
+
+    body.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <div style="font-size:24px;font-weight:700;color:${analysis.scoreColor}">${analysis.score}</div>
+        <div>
+          <div style="font-size:12px;font-weight:600;color:${analysis.scoreColor}">${analysis.scoreLabel}</div>
+          <div style="font-size:10px;color:var(--muted)">Riding Score / 100</div>
+        </div>
+      </div>
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin-bottom:6px">Gear Distribution</div>
+      ${gearBars}
+      ${hasSm ? `
+      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:8px 0 4px">Smoothness</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        <span class="badge badge-success" style="font-size:10px">Smooth ${sm.smooth||0}%</span>
+        <span class="badge badge-warning" style="font-size:10px">Mod ${(sm.moderate_accel||0)+(sm.moderate_brake||0)}%</span>
+        <span class="badge badge-danger" style="font-size:10px">Harsh ${(sm.harsh_accel||0)+(sm.harsh_brake||0)}%</span>
+      </div>` : `<div style="font-size:11px;color:var(--muted);margin-top:4px">No time data — harshness N/A (KML)</div>`}
+      <div style="display:flex;gap:12px;margin-top:8px">
+        <div><div style="font-size:10px;color:var(--muted)">Rev-hang</div><div style="font-size:13px;font-weight:600;color:${analysis.revHangCount>0?'var(--warning)':'var(--success)'}">${analysis.revHangCount}x</div></div>
+        <div><div style="font-size:10px;color:var(--muted)">Lugging</div><div style="font-size:13px;font-weight:600;color:${analysis.lugCount>0?'var(--warning)':'var(--success)'}">${analysis.lugCount}x</div></div>
+      </div>`;
   }
 
   function updateMarker(idx) {
@@ -135,8 +253,11 @@ function pageTracking(el) {
       icon: L.divIcon({ className: '', html: '<div style="font-size:20px;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5))">&#x1F6F5;</div>', iconSize: [26,26], iconAnchor: [13,13] }),
       zIndexOffset: 1000
     }).addTo(tMap);
+    const ep = tEnriched[idx];
     document.getElementById('tr-idx').textContent  = `${idx+1}/${tPoints.length}`;
-    document.getElementById('tr-spd').textContent  = p.speed > 0 ? p.speed.toFixed(1) + ' km/h' : '-';
+    const spdTxt = p.speed > 0 ? p.speed.toFixed(1) + ' km/h' : '-';
+    const gearTxt = ep?.estimatedGear > 0 ? ` · G${ep.estimatedGear}` : '';
+    document.getElementById('tr-spd').textContent  = spdTxt + gearTxt;
     document.getElementById('tr-time').textContent = p.time ? new Date(p.time).toLocaleString('en-GB') : '-';
   }
 
@@ -239,16 +360,22 @@ function pageTracking(el) {
     </div>`, () => {
       const name = document.getElementById('tsf-name').value.trim();
       if (!name) { toast('Trip name is required', 'error'); return; }
+      const selVehicleId = document.getElementById('tsf-veh').value || null;
+      const selVehicle   = selVehicleId ? dbGet(KEYS.vehicles, selVehicleId) : null;
+      const ridingAnalysis = selVehicle?.gearConfig?.length
+        ? computeRidingAnalysis(enrichPoints(tCurrentTrack.points, selVehicle.gearConfig), selVehicle.gearConfig)
+        : { hasGearData: false };
       const rec = {
         name,
         date: document.getElementById('tsf-date').value,
-        vehicleId: document.getElementById('tsf-veh').value || null,
+        vehicleId: selVehicleId,
         driverId: document.getElementById('tsf-drv').value || null,
         notes: document.getElementById('tsf-notes').value.trim(),
         format: tCurrentTrack.format,
         stats: tCurrentTrack.stats,
         points: tCurrentTrack.points,
         savedAt: new Date().toISOString(),
+        ridingAnalysis,
       };
       dbAdd(KEYS.trips, rec);
       const saved = db(KEYS.trips);

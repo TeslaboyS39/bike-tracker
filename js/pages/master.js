@@ -62,9 +62,30 @@ function pageVehicles(el) {
         <select id="vf-status"><option value="active"${v.status!=='inactive'?' selected':''}>Active</option><option value="inactive"${v.status==='inactive'?' selected':''}>Inactive</option></select>
       </div>
       <div class="form-group"><label>Notes</label><textarea id="vf-notes">${esc(v.notes||'')}</textarea></div>
+      <hr class="divider">
+      <div class="form-group">
+        <label style="font-size:12px;font-weight:600;color:var(--text);text-transform:none;letter-spacing:0">Gear Speed Ranges <span style="color:var(--muted);font-weight:400">(optional — enables riding analysis)</span></label>
+        <div id="vf-gears" style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+          ${(v.gearConfig || []).map((g, i) => `
+            <div class="vf-gear-row" style="display:grid;grid-template-columns:60px 1fr 1fr 28px;gap:6px;align-items:center">
+              <div style="font-size:12px;color:var(--muted);font-weight:600;text-align:center">G${g.gear}</div>
+              <input type="number" class="vf-gmin" placeholder="Min km/h" value="${g.minKmh}" style="padding:5px 8px;font-size:12px">
+              <input type="number" class="vf-gmax" placeholder="Max km/h" value="${g.maxKmh}" style="padding:5px 8px;font-size:12px">
+              <button type="button" onclick="this.closest('.vf-gear-row').remove()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0">×</button>
+            </div>`).join('')}
+        </div>
+        <button type="button" onclick="vfAddGear()" class="btn btn-secondary btn-sm" style="margin-top:8px;font-size:11px">${IC.plus} Add Gear</button>
+      </div>
     </div>`, () => {
       const plate = document.getElementById('vf-plate').value.trim().toUpperCase();
       if (!plate) { toast('Plate number is required', 'error'); return; }
+      const gearRows = document.querySelectorAll('#vf-gears .vf-gear-row');
+      const gearConfig = [];
+      gearRows.forEach((row, i) => {
+        const min = parseFloat(row.querySelector('.vf-gmin').value);
+        const max = parseFloat(row.querySelector('.vf-gmax').value);
+        if (!isNaN(min) && !isNaN(max) && max > min) gearConfig.push({ gear: i + 1, minKmh: min, maxKmh: max });
+      });
       const rec = {
         name: document.getElementById('vf-name').value.trim(),
         plate,
@@ -79,6 +100,7 @@ function pageVehicles(el) {
         odometer: parseInt(document.getElementById('vf-odo').value) || 0,
         status: document.getElementById('vf-status').value,
         notes: document.getElementById('vf-notes').value.trim(),
+        gearConfig: gearConfig.length ? gearConfig : (v.gearConfig || []),
       };
       if (id) dbUpdate(KEYS.vehicles, id, rec); else dbAdd(KEYS.vehicles, rec);
       closeModal(); toast(id ? 'Vehicle updated' : 'Vehicle added'); render();
@@ -89,6 +111,21 @@ function pageVehicles(el) {
     const v = dbGet(KEYS.vehicles, id);
     if (!confirm(`Delete vehicle "${v ? v.plate : id}"?`)) return;
     dbDelete(KEYS.vehicles, id); toast('Vehicle deleted', 'error'); render();
+  };
+
+  window.vfAddGear = function() {
+    const container = document.getElementById('vf-gears');
+    const rows = container.querySelectorAll('.vf-gear-row');
+    const gNum = rows.length + 1;
+    const div  = document.createElement('div');
+    div.className = 'vf-gear-row';
+    div.style.cssText = 'display:grid;grid-template-columns:60px 1fr 1fr 28px;gap:6px;align-items:center';
+    div.innerHTML = `
+      <div style="font-size:12px;color:var(--muted);font-weight:600;text-align:center">G${gNum}</div>
+      <input type="number" class="vf-gmin" placeholder="Min km/h" style="padding:5px 8px;font-size:12px">
+      <input type="number" class="vf-gmax" placeholder="Max km/h" style="padding:5px 8px;font-size:12px">
+      <button type="button" onclick="this.closest('.vf-gear-row').remove()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0">×</button>`;
+    container.appendChild(div);
   };
 
   render();
@@ -365,7 +402,10 @@ function pageGeofences(el) {
     if (!gfMap) {
       loadLeaflet().then(() => {
         gfMap = L.map('gf-map').setView([-6.2, 106.9], 11);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(gfMap);
+        const _streetL = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 });
+        const _satL    = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri', maxZoom: 19 });
+        _streetL.addTo(gfMap);
+        L.control.layers({ 'Street': _streetL, 'Satellite': _satL }, {}, { position: 'topright' }).addTo(gfMap);
         if (L.Control.Geocoder) {
           L.Control.geocoder({ defaultMarkGeocode: false, geocoder: L.Control.Geocoder.nominatim() })
             .on('markgeocode', e => gfMap.fitBounds(e.geocode.bbox))

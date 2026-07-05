@@ -9,11 +9,23 @@ function pageTripLog(el) {
     const sorted   = [...filtered].sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt));
 
     const tbody = sorted.length === 0
-      ? `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">No saved trips.</td></tr>`
+      ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px">No saved trips.</td></tr>`
       : sorted.map(t => {
           const veh = vehicles.find(v => v.id === t.vehicleId);
           const drv = drivers.find(d => d.id === t.driverId);
           const dist = t.stats ? Number(t.stats.distanceKm).toFixed(1) : '-';
+
+          // auto-compute + cache for trips saved before riding analysis feature
+          let ra = t.ridingAnalysis;
+          if (!ra?.hasGearData && veh?.gearConfig?.length && t.points?.length) {
+            const enriched = enrichPoints(t.points, veh.gearConfig);
+            ra = computeRidingAnalysis(enriched, veh.gearConfig);
+            dbUpdate(KEYS.trips, t.id, { ridingAnalysis: ra }); // cache so next load is instant
+          }
+
+          const score = ra?.hasGearData
+            ? `<span class="badge" style="background:transparent;border:1px solid ${ra.scoreColor};color:${ra.scoreColor}">${ra.score} ${ra.scoreLabel}</span>`
+            : '<span class="badge badge-muted">-</span>';
           return `<tr>
             <td>${fmtDate(t.date || t.savedAt)}</td>
             <td><strong>${esc(t.name)}</strong></td>
@@ -21,6 +33,7 @@ function pageTripLog(el) {
             <td>${esc(drv ? drv.name : '-')}</td>
             <td>${dist} km</td>
             <td><span class="badge badge-muted">${esc(t.format || '-')}</span></td>
+            <td>${score}</td>
             <td><div class="td-actions">
               <button class="btn btn-ghost btn-sm" title="View on map" onclick="viewTrip('${t.id}')">${IC.eye}</button>
               <button class="btn btn-ghost btn-sm text-danger" onclick="deleteTrip('${t.id}')">${IC.trash}</button>
@@ -38,7 +51,7 @@ function pageTripLog(el) {
         </select>
       </div>
       <div class="table-wrap"><table>
-        <thead><tr><th>Date</th><th>Trip Name</th><th>Vehicle</th><th>Driver</th><th>Distance</th><th>Format</th><th></th></tr></thead>
+        <thead><tr><th>Date</th><th>Trip Name</th><th>Vehicle</th><th>Driver</th><th>Distance</th><th>Format</th><th>Riding</th><th></th></tr></thead>
         <tbody>${tbody}</tbody>
       </table></div>
     </div>`;

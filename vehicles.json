@@ -14,6 +14,34 @@
     "theoreticalConsumption": 32.5,
     "odometer": 11990,
     "status": "active",
-    "notes": ""
+    "notes": "",
+    "gearConfig": [
+      {
+        "gear": 1,
+        "minKmh": 1,
+        "maxKmh": 10
+      },
+      {
+        "gear": 2,
+        "minKmh": 11,
+        "maxKmh": 30
+      },
+      {
+        "gear": 3,
+        "minKmh": 31,
+        "maxKmh": 60
+      },
+      {
+        "gear": 4,
+        "minKmh": 61,
+        "maxKmh": 80
+      },
+      {
+        "gear": 5,
+        "minKmh": 81,
+        "maxKmh": 110
+      }
+    ],
+    "updatedAt": "2026-07-05T10:57:22.306Z"
   }
 ]

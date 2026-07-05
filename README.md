@@ -12,13 +12,14 @@ Aplikasi monitoring kendaraan berbasis web, single-file, tanpa instalasi. Buka l
 - Geofence Library — polygon area pada peta (draw langsung di map)
 
 **Operasional**
-- **Dashboard** — KPI cards, peringatan dokumen mendekati expired, trip terbaru
-- **Tracking** — upload GPX/KML, visualisasi rute dengan warna berdasarkan kecepatan, simpan ke Trip Log
-- **Trip Log** — riwayat semua perjalanan, klik untuk replay di peta
+- **Dashboard** — KPI cards, alert maintenance due (date & km-based), peringatan dokumen expired, trip terbaru, infografis aktivitas perjalanan & konsumsi BBM, fleet status
+- **Tracking** — upload GPX/KML, visualisasi rute 3 mode (Speed / Gear / Harshness), satellite/street map toggle, simpan ke Trip Log
+- **Riding Analysis** — estimasi gear, akselerasi harshness, riding score 0–100 (Excellent/Good/Fair/Poor) per trip; distribusi gear & smoothness
+- **Trip Log** — riwayat semua perjalanan + riding score badge per trip, klik untuk replay di peta
 - **Fuel Log** — catatan pengisian BBM dengan timestamp, odometer, harga per liter
-- **Fuel Report** — grafik konsumsi aktual vs teoritis (km/L), analisis hemat/boros dalam liter dan rupiah, deteksi periode berlangsung (sejak isi bensin terakhir)
+- **Fuel Report** — grafik konsumsi aktual vs teoritis (km/L), analisis hemat/boros dalam liter dan rupiah, deteksi periode berlangsung
 - **Maintenance Log** — catatan servis multi-jenis dalam satu entri, auto-suggest tanggal & odometer next due
-- **Spare Parts** — tracking penggantian komponen, estimasi pemakaian (km), status OK/Segera/Ganti!
+- **Spare Parts** — tracking penggantian komponen, estimasi pemakaian (km), status OK/Soon/Replace!
 
 ## Cara Pakai
 
@@ -51,14 +52,24 @@ Lakukan export secara berkala untuk menghindari kehilangan data jika browser cac
 |---|---|
 | UI | Vanilla HTML + CSS + JavaScript (no framework) |
 | Peta | [Leaflet.js](https://leafletjs.com/) 1.9.4 — CDN, lazy-loaded |
-| Storage | `localStorage` (prefix `vms_`) |
+| Map search | Nominatim geocoder (gratis, tanpa API key) |
+| Satellite tiles | ESRI World Imagery (gratis, tanpa API key) |
+| Storage | `localStorage` (prefix `vms_`) + optional File System Access API |
 | Format GPS | GPX, KML |
-| Build | Tidak ada — single file |
+| Build | Tidak ada — buka dengan local server |
 
 ## File
 
 | File | Keterangan |
 |------|------------|
-| `vms.html` | Aplikasi utama — Vehicle Monitoring System |
+| `vms.html` | App shell — HTML structure + CSS |
+| `js/store.js` | Data layer — localStorage + File System API dual-write |
+| `js/core.js` | Router, sidebar, utils, Leaflet loader, riding analysis algorithm |
+| `js/pages/dashboard.js` | Dashboard — KPI, charts, alerts |
+| `js/pages/master.js` | Vehicle, Driver, Licenses, Geofences |
+| `js/pages/tracking.js` | GPS tracking + riding analysis visualization |
+| `js/pages/trips.js` | Trip Log + Fuel Log |
+| `js/pages/fuel-report.js` | Fuel efficiency report |
+| `js/pages/maintenance.js` | Maintenance Log + Spare Parts |
 | `gps-tracker.html` | Legacy — GPS viewer dengan geofencing |
 | `index.html` | Legacy — GPS track viewer sederhana |
