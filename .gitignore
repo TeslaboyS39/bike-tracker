@@ -16,3 +16,6 @@ maintenance.json
 spare_parts.json
 track_*.json
 *.gpx
+
+# Chrome's temp files from interrupted File System Access API writes (same folder as above)
+*.crswap

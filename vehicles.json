@@ -1,8 +1,8 @@
 [
   {
-    "id": "c4e6a144-6469-4fa4-b409-9d449de786ea",
-    "createdAt": "2026-06-15T00:32:32.660Z",
-    "name": "Motor",
+    "id": "633ea602-7dfc-4f63-af1b-f6658b5a1069",
+    "createdAt": "2026-08-01T13:38:50.078Z",
+    "name": "Bucephalus",
     "plate": "B 5733 BAI",
     "brand": "Benelli",
     "model": "Motobi 152",
@@ -11,37 +11,36 @@
     "color": "Hitam-Merah",
     "fuelType": "Pertalite",
     "fuelCapacity": 12.1,
-    "theoreticalConsumption": 32.5,
-    "odometer": 11990,
+    "theoreticalConsumption": 33,
+    "odometer": 11020,
     "status": "active",
     "notes": "",
     "gearConfig": [
       {
         "gear": 1,
         "minKmh": 1,
-        "maxKmh": 10
+        "maxKmh": 15
       },
       {
         "gear": 2,
-        "minKmh": 11,
-        "maxKmh": 30
+        "minKmh": 15,
+        "maxKmh": 25
       },
       {
         "gear": 3,
-        "minKmh": 31,
+        "minKmh": 25,
         "maxKmh": 60
       },
       {
         "gear": 4,
-        "minKmh": 61,
+        "minKmh": 60,
         "maxKmh": 80
       },
       {
         "gear": 5,
-        "minKmh": 81,
+        "minKmh": 80,
         "maxKmh": 110
       }
-    ],
-    "updatedAt": "2026-07-05T10:57:22.306Z"
+    ]
   }
 ]
