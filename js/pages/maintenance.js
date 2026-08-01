@@ -171,11 +171,6 @@ function pageSpareparts(el) {
     'Engine Oil': 90,'Oil Filter': 180,'Air Filter': 180,
   };
 
-  function estOdometer(vehicleId) {
-    const logs = db(KEYS.fuelLogs).filter(l => l.vehicleId === vehicleId && l.odometer);
-    return logs.length ? Math.max(...logs.map(l => Number(l.odometer))) : null;
-  }
-
   window.partAutoSuggest = function() {
     const partName = document.getElementById('sp-name').value;
     const date     = document.getElementById('sp-date').value;

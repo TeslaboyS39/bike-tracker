@@ -5,6 +5,21 @@ const fmtNum  = n => Number(n || 0).toLocaleString('en-US');
 const fmtCur  = n => 'Rp ' + Number(n || 0).toLocaleString('en-US');
 const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
 
+// Best-known current odometer for a vehicle: odometer only ever goes up, so the highest value
+// recorded anywhere (fuel log, maintenance, spare parts, or the vehicle's initial reading) is a
+// safer estimate than "whichever record has the latest date" — a mistyped later entry would
+// otherwise make the odometer look like it went backwards.
+function estOdometer(vehicleId) {
+  const vehicle = dbGet(KEYS.vehicles, vehicleId);
+  const readings = [
+    vehicle?.odometer,
+    ...db(KEYS.fuelLogs).filter(l => l.vehicleId === vehicleId).map(l => l.odometer),
+    ...db(KEYS.maintenance).filter(m => m.vehicleId === vehicleId).map(m => m.odometer),
+    ...db(KEYS.spareParts).filter(p => p.vehicleId === vehicleId).map(p => p.odometerAt),
+  ].filter(v => v != null && v !== '').map(Number);
+  return readings.length ? Math.max(...readings) : null;
+}
+
 function daysUntil(dateStr) {
   if (!dateStr) return null;
   return Math.ceil((new Date(dateStr) - new Date()) / 86400000);
@@ -53,6 +68,7 @@ const IC = {
   grid:     `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>`,
   map:      `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><polygon points="3,6 9,3 15,6 21,3 21,18 15,21 9,18 3,21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>`,
   route:    `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M3 17l3-9 4 4 3-6 4 8 4-4"/></svg>`,
+  gauge:    `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 21a9 9 0 1 0-9-9"/><path d="M12 12l4-3"/><circle cx="12" cy="12" r="1"/></svg>`,
   droplet:  `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>`,
   chart:    `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><rect x="3" y="12" width="4" height="9"/><rect x="10" y="7" width="4" height="14"/><rect x="17" y="4" width="4" height="17"/></svg>`,
   wrench:   `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,
@@ -281,18 +297,59 @@ function buildSpeedTrack(points) {
 }
 
 function computeStats(points) {
-  let dist = 0, maxSpd = 0, sumSpd = 0, spdCnt = 0, elevGain = 0, elevLoss = 0;
+  let dist = 0, maxSpd = 0, elevGain = 0, elevLoss = 0;
   for (let i = 1; i < points.length; i++) {
     dist += haversine(points[i-1], points[i]);
-    if (points[i].speed > 0) { maxSpd = Math.max(maxSpd, points[i].speed); sumSpd += points[i].speed; spdCnt++; }
+    if (points[i].speed > maxSpd) maxSpd = points[i].speed;
     const de = points[i].ele - points[i-1].ele;
     if (de > 0) elevGain += de; else elevLoss -= de;
   }
   const first = points[0].time ? new Date(points[0].time) : null;
   const last  = points[points.length-1].time ? new Date(points[points.length-1].time) : null;
-  let duration = '-';
-  if (first && last) { const ms = last - first; duration = `${String(Math.floor(ms/60000)).padStart(2,'0')}:${String(Math.floor((ms%60000)/1000)).padStart(2,'0')}`; }
-  return { distanceKm: dist, maxSpeed: maxSpd, avgSpeed: spdCnt ? sumSpd/spdCnt : 0, elevGain: Math.round(elevGain), elevLoss: Math.round(elevLoss), duration };
+  let duration = '-', durationMs = 0;
+  if (first && last) {
+    durationMs = last - first;
+    duration = `${String(Math.floor(durationMs/60000)).padStart(2,'0')}:${String(Math.floor((durationMs%60000)/1000)).padStart(2,'0')}`;
+  }
+  // distance / elapsed time, not a mean of per-sample speed readings — this way a real mid-route
+  // stop (traffic, red light) correctly drags the average down instead of being silently excluded.
+  const avgSpeed = durationMs > 0 ? dist / (durationMs / 3600000) : 0;
+  return { distanceKm: dist, maxSpeed: maxSpd, avgSpeed, elevGain: Math.round(elevGain), elevLoss: Math.round(elevLoss), duration };
+}
+
+// Detects a "forgot to stop the logger" tail: the first low-speed point after which position
+// holds within radiusKm of itself for at least minIdleMin straight AND which still ends up near
+// the track's actual final point — signalling the ride is over here and the rest of the file is
+// GPS drift/wandering at the destination (indoors, no real movement), not a mid-route stop
+// (traffic light, red light, waiting) after which the rider carries on for a real extra leg.
+// Anchored to the candidate point itself (not blindly to the file's last point) because indoor
+// GPS drift can wander past a fixed radius from any single fixed sample, including the final one
+// — hence finalToleranceKm is looser than radiusKm to tolerate hours of accumulated drift.
+// The speed gate keeps a fast final-approach sample (which can coincidentally sit within
+// radiusKm of where the rider stops moments later, e.g. a compact loop into a driveway) from
+// being picked as "arrival" before the rider has actually stopped.
+// NB: haversine() here returns kilometers (matches its use in computeStats), hence radiusKm.
+function detectArrivalCutoff(points, radiusKm = 0.2, minIdleMin = 15, maxSpeedKmh = 5) {
+  const n = points.length;
+  if (n < 2) return null;
+  const last = points[n - 1];
+  if (!last.time) return null;
+  const finalToleranceKm = radiusKm * 5;
+  const minIdleMs = minIdleMin * 60000;
+  for (let i = 0; i < n - 1; i++) {
+    if (!points[i].time || points[i].speed > maxSpeedKmh) continue;
+    const startMs = new Date(points[i].time).getTime();
+    let j = i + 1;
+    while (j < n && haversine(points[i], points[j]) <= radiusKm) j++;
+    const heldUntil = points[j - 1];
+    if (!heldUntil.time) continue;
+    const heldMs = new Date(heldUntil.time).getTime() - startMs;
+    if (heldMs < minIdleMs) continue;
+    if (haversine(points[i], last) > finalToleranceKm) continue;
+    const idleMs = new Date(last.time).getTime() - startMs;
+    return { cutoffIdx: i, idleMinutes: Math.round(idleMs / 60000) };
+  }
+  return null;
 }
 
 function parseGPX(xmlText) {

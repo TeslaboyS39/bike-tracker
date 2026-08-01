@@ -1,6 +1,7 @@
 function pageTracking(el) {
   let tMap = null, tTrackLayer = null, tStartM = null, tEndM = null, tPlayM = null;
   let tPoints = [], tEnriched = [], tCurrentTrack = null, tPlayInterval = null, tTrackMode = 'speed';
+  let tArrivalCutoff = null, tTrimApplied = false;
 
   el.innerHTML = `
     <div class="tracking-panel">
@@ -14,6 +15,7 @@ function pageTracking(el) {
           <input type="file" id="tr-file" accept=".gpx,.kml" style="display:none">
         </label>
         <div id="tr-info" style="display:none;margin-top:8px"></div>
+        <div id="tr-arrival-banner" style="display:none;margin-top:8px"></div>
       </div>
 
       <div class="panel-section" id="tr-stats-panel" style="display:none">
@@ -118,7 +120,9 @@ function pageTracking(el) {
   function renderTrack(parsed) {
     const { points, name, format } = parsed;
     tPoints = points;
-    tCurrentTrack = { ...parsed, stats: computeStats(points) };
+    tCurrentTrack = { ...parsed, stats: parsed.stats || computeStats(points) };
+    tTrimApplied = !!parsed.trimmed;
+    tArrivalCutoff = detectArrivalCutoff(points);
 
     // enrich with gear + harshness if vehicle is linked
     const vehicleId = parsed.vehicleId || null;
@@ -136,13 +140,7 @@ function pageTracking(el) {
     tEndM   = L.marker(ll[ll.length - 1]).addTo(tMap).bindPopup('<b>End</b>');
     tMap.fitBounds(tTrackLayer.getBounds(), { padding: [40, 40] });
 
-    const s = tCurrentTrack.stats;
-    document.getElementById('tr-dist').innerHTML   = s.distanceKm.toFixed(2) + '<span class="stat-unit">km</span>';
-    document.getElementById('tr-dur').textContent  = s.duration;
-    document.getElementById('tr-maxspd').innerHTML = s.maxSpeed.toFixed(1) + '<span class="stat-unit">km/h</span>';
-    document.getElementById('tr-avgspd').innerHTML = s.avgSpeed.toFixed(1) + '<span class="stat-unit">km/h</span>';
-    document.getElementById('tr-elev').innerHTML   = s.elevGain + '/' + s.elevLoss + '<span class="stat-unit">m</span>';
-    document.getElementById('tr-pts').textContent  = points.length;
+    renderStatsDisplay();
     document.getElementById('tr-stats-panel').style.display   = '';
     document.getElementById('tr-playback-panel').style.display = '';
     document.getElementById('tr-legend').style.display = points.some(p => p.speed > 0) ? '' : 'none';
@@ -166,6 +164,50 @@ function pageTracking(el) {
     if (format === 'KML') showInfo('KML has no per-point time & speed data.', 'info');
     else showInfo('Loaded successfully. ' + points.length + ' points.', 'success');
     renderGfEvents();
+    renderArrivalBanner();
+  }
+
+  function renderStatsDisplay() {
+    const s = tCurrentTrack.stats;
+    document.getElementById('tr-dist').innerHTML   = s.distanceKm.toFixed(2) + '<span class="stat-unit">km</span>';
+    document.getElementById('tr-dur').textContent  = s.duration;
+    document.getElementById('tr-maxspd').innerHTML = s.maxSpeed.toFixed(1) + '<span class="stat-unit">km/h</span>';
+    document.getElementById('tr-avgspd').innerHTML = s.avgSpeed.toFixed(1) + '<span class="stat-unit">km/h</span>';
+    document.getElementById('tr-elev').innerHTML   = s.elevGain + '/' + s.elevLoss + '<span class="stat-unit">m</span>';
+    document.getElementById('tr-pts').textContent  = tTrimApplied
+      ? `${tArrivalCutoff.cutoffIdx + 1} of ${tPoints.length}`
+      : tPoints.length;
+  }
+
+  function renderArrivalBanner() {
+    const banner = document.getElementById('tr-arrival-banner');
+    if (!tArrivalCutoff) { banner.style.display = 'none'; return; }
+    const h = Math.floor(tArrivalCutoff.idleMinutes / 60), m = tArrivalCutoff.idleMinutes % 60;
+    const idleTxt = (h > 0 ? `${h}h ` : '') + `${m}m`;
+    banner.style.display = '';
+    if (tTrimApplied) {
+      banner.innerHTML = `<div class="info-box warning">
+        Stats trimmed — ignoring last ${idleTxt} of the logger staying put near the endpoint (GPS noise, not movement).
+        <div style="margin-top:6px"><button class="btn btn-secondary btn-sm" id="tr-undo-trim">Undo, use full stats</button></div>
+      </div>`;
+      document.getElementById('tr-undo-trim').addEventListener('click', () => {
+        tTrimApplied = false;
+        tCurrentTrack.stats = computeStats(tPoints);
+        renderStatsDisplay();
+        renderArrivalBanner();
+      });
+    } else {
+      banner.innerHTML = `<div class="info-box warning">
+        Logger seems to have kept running for ~${idleTxt} after you arrived (stayed within ~200m). This inflates Duration and drags down Avg Speed.
+        <div style="margin-top:6px"><button class="btn btn-primary btn-sm" id="tr-apply-trim">Trim stats to actual ride</button></div>
+      </div>`;
+      document.getElementById('tr-apply-trim').addEventListener('click', () => {
+        tTrimApplied = true;
+        tCurrentTrack.stats = computeStats(tPoints.slice(0, tArrivalCutoff.cutoffIdx + 1));
+        renderStatsDisplay();
+        renderArrivalBanner();
+      });
+    }
   }
 
   window.setTrackMode = function(mode) {
@@ -373,6 +415,7 @@ function pageTracking(el) {
         notes: document.getElementById('tsf-notes').value.trim(),
         format: tCurrentTrack.format,
         stats: tCurrentTrack.stats,
+        trimmed: tTrimApplied,
         points: tCurrentTrack.points,
         savedAt: new Date().toISOString(),
         ridingAnalysis,

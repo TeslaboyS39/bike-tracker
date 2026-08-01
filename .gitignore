@@ -2,3 +2,17 @@ memory/
 .claude/
 .learnings/
 CLAUDE.md
+
+# Real fleet data synced here via the app's File System Access API folder-picker —
+# never meant to be served as public static assets.
+vehicles.json
+drivers.json
+driver_licenses.json
+vehicle_licenses.json
+geofences.json
+trips.json
+fuel_logs.json
+maintenance.json
+spare_parts.json
+track_*.json
+*.gpx

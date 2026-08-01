@@ -37,9 +37,7 @@ function pageDashboard(el) {
     const types    = Array.isArray(m.types) ? m.types : m.type ? [m.type] : ['Service'];
     const label    = types.join(', ');
 
-    // estimate current odometer from fuel logs
-    const fuels    = fuelLogs.filter(l => l.vehicleId === m.vehicleId && l.odometer != null);
-    const estOdo   = fuels.length ? Math.max(...fuels.map(l => Number(l.odometer))) : null;
+    const estOdo   = estOdometer(m.vehicleId);
 
     if (m.nextDueDate) {
       const d = daysUntil(m.nextDueDate);
@@ -148,12 +146,25 @@ function pageDashboard(el) {
     </svg>`;
   }
 
+  // ── Odometer KPI: single active vehicle -> its km; multiple -> compact per-plate list ──
+  const activeVehicleList = vehicles.filter(v => v.status === 'active');
+  const odoEntries = activeVehicleList.map(v => ({ plate: v.plate, odo: estOdometer(v.id) }));
+  const odoValue = odoEntries.length === 0
+    ? '-'
+    : odoEntries.length === 1
+      ? (odoEntries[0].odo != null ? fmtNum(odoEntries[0].odo) : '-')
+      : `<div style="display:flex;flex-direction:column;gap:2px">${odoEntries.map(e =>
+          `<div style="font-size:14px;font-weight:600">${esc(e.plate)} <span style="font-weight:400;color:var(--muted)">${e.odo != null ? fmtNum(e.odo) + ' km' : '-'}</span></div>`
+        ).join('')}</div>`;
+  const odoSub = odoEntries.length === 0 ? 'No active vehicles' : odoEntries.length === 1 ? odoEntries[0].plate : 'estimated from fuel/maintenance/parts';
+
   // ── KPI cards ──────────────────────────────────────────────────────────────
   const kpis = [
     { label: 'Active Vehicles', value: activeVehicles, sub: `of ${vehicles.length} registered`,   color: 'var(--accent)',   icon: IC.vehicle  },
     { label: 'Active Drivers',  value: activeDrivers,  sub: `of ${drivers.length} registered`,    color: '#22c55e',         icon: IC.driver   },
     { label: 'Needs Attention',  value: critCount + maintCritCount, sub: `${critCount} docs · ${maintCritCount} maintenance overdue`, color: (critCount + maintCritCount) > 0 ? 'var(--warning)' : 'var(--muted)', icon: IC.document },
     { label: 'Total Trips',     value: trips.length,    sub: `${fmtNum(Math.round(totalKm))} km total`, color: '#a78bfa',   icon: IC.route    },
+    { label: 'Odometer',        value: odoValue,        sub: odoSub, color: '#14b8a6', icon: IC.gauge },
   ];
   const kpiHtml = kpis.map(k => `
     <div class="kpi-card" style="border-left:3px solid ${k.color}">
